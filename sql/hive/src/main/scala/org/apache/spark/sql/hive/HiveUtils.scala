@@ -265,15 +265,17 @@ private[spark] object HiveUtils extends Logging {
    */
   protected[hive] def newClientForMetadata(
       conf: SparkConf,
-      hadoopConf: Configuration): HiveClient = {
+      hadoopConf: Configuration,
+      user: String = null): HiveClient = {
     val configurations = hiveClientConfigurations(hadoopConf)
-    newClientForMetadata(conf, hadoopConf, configurations)
+    newClientForMetadata(conf, hadoopConf, configurations, user)
   }
 
   protected[hive] def newClientForMetadata(
       conf: SparkConf,
       hadoopConf: Configuration,
-      configurations: Map[String, String]): HiveClient = {
+      configurations: Map[String, String],
+      user: String): HiveClient = {
     val sqlConf = new SQLConf
     sqlConf.setConf(SQLContext.getSQLProperties(conf))
     val hiveMetastoreVersion = HiveUtils.hiveMetastoreVersion(sqlConf)
@@ -363,7 +365,7 @@ private[spark] object HiveUtils extends Logging {
         barrierPrefixes = hiveMetastoreBarrierPrefixes,
         sharedPrefixes = hiveMetastoreSharedPrefixes)
     }
-    isolatedLoader.createClient()
+    isolatedLoader.createClient(user)
   }
 
   /** Constructs a configuration for hive, where the metastore is located in a temp directory. */

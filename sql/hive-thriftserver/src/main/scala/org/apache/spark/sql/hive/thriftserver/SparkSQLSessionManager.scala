@@ -26,8 +26,8 @@ import org.apache.hive.service.cli.SessionHandle
 import org.apache.hive.service.cli.session.SessionManager
 import org.apache.hive.service.cli.thrift.TProtocolVersion
 import org.apache.hive.service.server.HiveServer2
-
 import org.apache.spark.sql.SQLContext
+import org.apache.spark.sql.hive.client.HiveClient
 import org.apache.spark.sql.hive.{HiveSessionState, HiveUtils}
 import org.apache.spark.sql.hive.thriftserver.ReflectionUtils._
 import org.apache.spark.sql.hive.thriftserver.server.SparkSQLOperationManager
@@ -78,11 +78,18 @@ private[hive] class SparkSQLSessionManager(hiveServer: HiveServer2, sqlContext: 
     } else {
       sqlContext.newSession()
     }
+    val client = HiveUtils.newClientForMetadata(
+      sqlContext.sparkContext.conf,
+      sqlContext.sparkContext.hadoopConfiguration,
+      username)
     ctx.setConf("spark.sql.hive.version", HiveUtils.hiveExecutionVersion)
     if (sessionConf != null && sessionConf.containsKey("use:database")) {
-      ctx.sql(s"use ${sessionConf.get("use:database")}")
+      val statement = s"use ${sessionConf.get("use:database")}"
+      client.authorize(statement)
+      ctx.sql(statement)
     }
     sparkSqlOperationManager.sessionToContexts.put(sessionHandle, ctx)
+    sparkSqlOperationManager.sessionToClient.put(sessionHandle, client)
     sessionHandle
   }
 
@@ -91,5 +98,6 @@ private[hive] class SparkSQLSessionManager(hiveServer: HiveServer2, sqlContext: 
     super.closeSession(sessionHandle)
     sparkSqlOperationManager.sessionToActivePool.remove(sessionHandle)
     sparkSqlOperationManager.sessionToContexts.remove(sessionHandle)
+    sparkSqlOperationManager.sessionToClient.remove(sessionHandle)
   }
 }

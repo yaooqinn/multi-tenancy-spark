@@ -22,30 +22,32 @@ import java.lang.reflect.{InvocationTargetException, Method, Modifier}
 import java.net.URI
 import java.util.{ArrayList => JArrayList, List => JList, Map => JMap, Set => JSet}
 import java.util.concurrent.TimeUnit
-
 import scala.collection.JavaConverters._
 import scala.util.Try
 import scala.util.control.NonFatal
 
 import org.apache.hadoop.fs.{FileSystem, Path}
 import org.apache.hadoop.hive.conf.HiveConf
-import org.apache.hadoop.hive.metastore.api.{Function => HiveFunction, FunctionType, MetaException, PrincipalType, ResourceType, ResourceUri}
-import org.apache.hadoop.hive.ql.Driver
+import org.apache.hadoop.hive.metastore.api.{FunctionType, MetaException, PrincipalType, ResourceType, ResourceUri, Function => HiveFunction}
+import org.apache.hadoop.hive.ql.{Context, Driver}
 import org.apache.hadoop.hive.ql.metadata.{Hive, HiveException, Partition, Table}
+import org.apache.hadoop.hive.ql.parse.HiveParser
 import org.apache.hadoop.hive.ql.plan.AddPartitionDesc
 import org.apache.hadoop.hive.ql.processors.{CommandProcessor, CommandProcessorFactory}
 import org.apache.hadoop.hive.ql.session.SessionState
 import org.apache.hadoop.hive.serde.serdeConstants
-
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.FunctionIdentifier
 import org.apache.spark.sql.catalyst.analysis.NoSuchPermanentFunctionException
 import org.apache.spark.sql.catalyst.catalog.{CatalogFunction, CatalogTablePartition, FunctionResource, FunctionResourceType}
 import org.apache.spark.sql.catalyst.expressions._
+import org.apache.spark.sql.catalyst.parser.ParserUtils
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.{IntegralType, StringType}
 import org.apache.spark.util.Utils
+
+import org.apache.hadoop.hive.ql.parse.{BaseSemanticAnalyzer, ParseDriver, ParseUtils, SemanticAnalyzerFactory}
 
 /**
  * A shim that defines the interface between [[HiveClientImpl]] and the underlying Hive library used
@@ -77,7 +79,7 @@ private[client] sealed abstract class Shim {
 
   def getPartitionsByFilter(hive: Hive, table: Table, predicates: Seq[Expression]): Seq[Partition]
 
-  def getCommandProcessor(token: String, conf: HiveConf): CommandProcessor
+  def getCommandProcessor(token: Array[String], conf: HiveConf): CommandProcessor
 
   def getDriverResults(driver: Driver): Seq[String]
 
@@ -146,6 +148,13 @@ private[client] sealed abstract class Shim {
       part: JList[String],
       deleteData: Boolean,
       purge: Boolean): Unit
+
+  /**
+   * try to authorize privilege of executing the sql statement to current user
+   *
+   * @param sql the sql statement provided by current user
+   */
+  def authorize(sql: String): Unit
 
   protected def findStaticMethod(klass: Class[_], name: String, args: Class[_]*): Method = {
     val method = findMethod(klass, name, args: _*)
@@ -311,8 +320,8 @@ private[client] class Shim_v0_12 extends Shim with Logging {
     getAllPartitions(hive, table)
   }
 
-  override def getCommandProcessor(token: String, conf: HiveConf): CommandProcessor =
-    getCommandProcessorMethod.invoke(null, token, conf).asInstanceOf[CommandProcessor]
+  override def getCommandProcessor(token: Array[String], conf: HiveConf): CommandProcessor =
+    getCommandProcessorMethod.invoke(null, token(0), conf).asInstanceOf[CommandProcessor]
 
   override def getDriverResults(driver: Driver): Seq[String] = {
     val res = new JArrayList[String]()
@@ -412,6 +421,42 @@ private[client] class Shim_v0_12 extends Shim with Logging {
 
   def listFunctions(hive: Hive, db: String, pattern: String): Seq[String] = {
     Seq.empty[String]
+  }
+
+  /**
+   * try to authorize privilege of executing the sql statement to current user
+   *
+   * @param sql the sql statement provided by current user
+   */
+  override def authorize(sql: String): Unit = {
+    val state = SessionState.get
+    val conf = state.getConf
+    if (conf.getBoolVar(HiveConf.ConfVars.HIVE_AUTHORIZATION_ENABLED)) {
+      val origin = Thread.currentThread().getContextClassLoader
+      Thread.currentThread().setContextClassLoader(state.getClass.getClassLoader)
+      val ctx = new Context(conf)
+      val parser = new ParseDriver
+      val tree = ParseUtils.findRootNonNullToken(parser.parse(sql))
+      val analyzer = SemanticAnalyzerFactory.get(conf, tree)
+      val txnMgr = state.initTxnMgr(conf)
+      ctx.setTryCount(Int.MaxValue)
+      ctx.setHDFSCleanup(true)
+      ctx.setCmd(sql)
+      ctx.setHiveTxnManager(txnMgr)
+      analyzer.analyze(tree, ctx)
+
+      if (!analyzer.skipAuthorization()) {
+        Driver.doAuthorization(analyzer, sql)
+      }
+
+      tree.getType match {
+        case HiveParser.TOK_SWITCHDATABASE =>
+          val db = sql.trim.split("\\s+")(1)
+          state.setCurrentDatabase(db)
+        case _ =>
+      }
+      Thread.currentThread().setContextClassLoader(origin)
+    }
   }
 }
 
@@ -623,8 +668,8 @@ private[client] class Shim_v0_13 extends Shim_v0_12 {
     partitions.asScala.toSeq
   }
 
-  override def getCommandProcessor(token: String, conf: HiveConf): CommandProcessor =
-    getCommandProcessorMethod.invoke(null, Array(token), conf).asInstanceOf[CommandProcessor]
+  override def getCommandProcessor(token: Array[String], conf: HiveConf): CommandProcessor =
+    getCommandProcessorMethod.invoke(null, token, conf).asInstanceOf[CommandProcessor]
 
   override def getDriverResults(driver: Driver): Seq[String] = {
     val res = new JArrayList[Object]()

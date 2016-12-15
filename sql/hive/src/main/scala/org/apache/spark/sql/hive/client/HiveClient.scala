@@ -262,12 +262,19 @@ private[hive] trait HiveClient {
   def addJar(path: String): Unit
 
   /** Return a [[HiveClient]] as new session, that will share the class loader and Hive client */
-  def newSession(): HiveClient
+  def newSession(userName: String = null): HiveClient
 
   /** Run a function within Hive state (SessionState, HiveConf, Hive client and class loader) */
   def withHiveState[A](f: => A): A
 
   /** Used for testing only.  Removes all metadata from this instance of Hive. */
   def reset(): Unit
+
+  /**
+   * try to authorize privilege of executing the sql statement to current user
+   *
+   * @param sql the sql statement provided by current user
+   */
+  def authorize(sql: String): Unit
 
 }

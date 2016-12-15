@@ -22,19 +22,18 @@ import java.io.{File, PrintStream}
 import scala.collection.JavaConverters._
 import scala.collection.mutable.ArrayBuffer
 import scala.language.reflectiveCalls
-
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.Path
 import org.apache.hadoop.hive.conf.HiveConf
 import org.apache.hadoop.hive.metastore.{TableType => HiveTableType}
-import org.apache.hadoop.hive.metastore.api.{Database => HiveDatabase, FieldSchema}
+import org.apache.hadoop.hive.metastore.api.{FieldSchema, Database => HiveDatabase}
 import org.apache.hadoop.hive.metastore.api.{SerDeInfo, StorageDescriptor}
-import org.apache.hadoop.hive.ql.Driver
+import org.apache.hadoop.hive.ql.{Context, Driver}
 import org.apache.hadoop.hive.ql.metadata.{Hive, Partition => HivePartition, Table => HiveTable}
+import org.apache.hadoop.hive.ql.parse.{ParseDriver, ParseUtils, SemanticAnalyzerFactory}
 import org.apache.hadoop.hive.ql.processors._
 import org.apache.hadoop.hive.ql.session.SessionState
 import org.apache.hadoop.security.UserGroupInformation
-
 import org.apache.spark.{SparkConf, SparkException}
 import org.apache.spark.internal.Logging
 import org.apache.spark.metrics.source.HiveCatalogMetrics
@@ -45,6 +44,7 @@ import org.apache.spark.sql.catalyst.catalog._
 import org.apache.spark.sql.catalyst.catalog.CatalogTypes.TablePartitionSpec
 import org.apache.spark.sql.catalyst.expressions.Expression
 import org.apache.spark.sql.catalyst.parser.{CatalystSqlParser, ParseException}
+import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.execution.QueryExecutionException
 import org.apache.spark.sql.hive.HiveUtils
 import org.apache.spark.sql.types.{MetadataBuilder, StructField, StructType}
@@ -81,7 +81,8 @@ private[hive] class HiveClientImpl(
     hadoopConf: Configuration,
     extraConfig: Map[String, String],
     initClassLoader: ClassLoader,
-    val clientLoader: IsolatedClientLoader)
+    val clientLoader: IsolatedClientLoader,
+    val user: String)
   extends HiveClient
   with Logging {
 
@@ -185,7 +186,13 @@ private[hive] class HiveClientImpl(
           }
           hiveConf.set(k, v)
         }
-        val state = new SessionState(hiveConf)
+        val state = version match {
+          case hive.v12 => new SessionState(hiveConf)
+          case _ => new SessionState(hiveConf, user)
+        }
+
+        state.setIsHiveServerQuery(true)
+
         if (clientLoader.cachedHive != null) {
           Hive.set(clientLoader.cachedHive.asInstanceOf[Hive])
         }
@@ -603,7 +610,7 @@ private[hive] class HiveClientImpl(
       val tokens: Array[String] = cmd_trimmed.split("\\s+")
       // The remainder of the command.
       val cmd_1: String = cmd_trimmed.substring(tokens(0).length()).trim()
-      val proc = shim.getCommandProcessor(tokens(0), conf)
+      val proc = shim.getCommandProcessor(tokens, conf)
       proc match {
         case driver: Driver =>
           val response: CommandProcessorResponse = driver.run(cmd)
@@ -722,6 +729,7 @@ private[hive] class HiveClientImpl(
     shim.listFunctions(client, db, pattern)
   }
 
+
   def addJar(path: String): Unit = {
     val uri = new Path(path).toUri
     val jarURL = if (uri.getScheme == null) {
@@ -735,8 +743,8 @@ private[hive] class HiveClientImpl(
     runSqlHive(s"ADD JAR $path")
   }
 
-  def newSession(): HiveClientImpl = {
-    clientLoader.createClient().asInstanceOf[HiveClientImpl]
+  def newSession(user: String): HiveClientImpl = {
+    clientLoader.createClient(user).asInstanceOf[HiveClientImpl]
   }
 
   def reset(): Unit = withHiveState {
@@ -880,4 +888,42 @@ private[hive] class HiveClientImpl(
         parameters =
           if (hp.getParameters() != null) hp.getParameters().asScala.toMap else Map.empty)
   }
+
+
+
+  /* -------------------------------------------------------- *
+   |  Helper methods for Authorization for tables from Hive   |
+   * -------------------------------------------------------- */
+
+  /**
+   * try to authorize privilege of executing the sql statement to current user
+   *
+   * @param sql the sql statement provided by current user
+   */
+  override def authorize(sql: String): Unit = withHiveState {
+    try {
+      val tokens = sql.trim.split("\\s+")
+      val proc = shim.getCommandProcessor(tokens, conf)
+
+      proc match {
+        case d: Driver => shim.authorize(sql)
+        case _ =>
+      }
+    } catch {
+      case e: Exception =>
+        logError(
+          s"""
+             |======================
+             |HIVE FAILURE OUTPUT
+             |======================
+             |${e.getMessage}
+             |======================
+             |END HIVE FAILURE OUTPUT
+             |======================
+          """.stripMargin)
+        throw e
+    }
+
+  }
+
 }
