@@ -923,7 +923,13 @@ private[hive] class HiveClientImpl(
           """.stripMargin)
         throw e
     }
-
   }
+
+  /** get the current database in [[org.apache.hadoop.hive.ql.session.SessionState]] */
+  override def getCurrentDatabase(): String = state.getCurrentDatabase
+
+  /** get the current database in [[org.apache.hadoop.hive.ql.session.SessionState]] */
+
+  override def getCurrentUser() = user
 
 }

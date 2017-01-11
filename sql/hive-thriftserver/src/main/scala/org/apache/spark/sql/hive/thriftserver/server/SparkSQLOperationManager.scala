@@ -17,8 +17,8 @@
 
 package org.apache.spark.sql.hive.thriftserver.server
 
-import java.util.{Map => JMap}
 import java.util.concurrent.ConcurrentHashMap
+import java.util.{Map => JMap}
 
 import org.apache.hive.service.cli._
 import org.apache.hive.service.cli.operation.{ExecuteStatementOperation, Operation, OperationManager}
@@ -49,7 +49,23 @@ private[thriftserver] class SparkSQLOperationManager()
       confOverlay: JMap[String, String],
       async: Boolean): ExecuteStatementOperation = synchronized {
     val sqlContext = sessionToContexts.get(parentSession.getSessionHandle)
-    val client = sessionToClient.get(parentSession.getSessionHandle)
+    var client = sessionToClient.get(parentSession.getSessionHandle)
+    val formatted = statement.toLowerCase.split("//s+").mkString(" ")
+    if (formatted.startsWith("set hivevar:ranger.user.name")) {
+      val vars = formatted.split("=")
+      val rangerUser = if (vars.size > 1) {
+        vars(1)
+      } else {
+        logInfo(s"Please remove `hivevar:` to check hive variables e.g. `set ranger.user.name;`")
+        null
+      }
+      if (rangerUser != null && rangerUser != client.getCurrentUser()) {
+        val currentDatabase = client.getCurrentDatabase()
+        client = client.newSession(rangerUser)
+        client.setCurrentDatabase(currentDatabase)
+        sessionToClient.put(parentSession.getSessionHandle, client)
+      }
+    }
     require(sqlContext != null, s"Session handle: ${parentSession.getSessionHandle} has not been" +
       s" initialized or had already closed.")
     val sessionState = sqlContext.sessionState.asInstanceOf[HiveSessionState]

@@ -277,4 +277,11 @@ private[hive] trait HiveClient {
    */
   def authorize(sql: String): Unit
 
+  /** get the current database in [[org.apache.hadoop.hive.ql.session.SessionState]] */
+  def getCurrentDatabase(): String
+
+
+  /** get the current user in [[org.apache.hadoop.hive.ql.session.SessionState]] */
+  def getCurrentUser(): String
+
 }
