@@ -435,14 +435,14 @@ private[client] class Shim_v0_12 extends Shim with Logging {
       val origin = Thread.currentThread().getContextClassLoader
       Thread.currentThread().setContextClassLoader(state.getClass.getClassLoader)
       val ctx = new Context(conf)
-      val parser = new ParseDriver
-      val tree = ParseUtils.findRootNonNullToken(parser.parse(sql))
-      val analyzer = SemanticAnalyzerFactory.get(conf, tree)
-      val txnMgr = state.initTxnMgr(conf)
       ctx.setTryCount(Int.MaxValue)
       ctx.setHDFSCleanup(true)
       ctx.setCmd(sql)
+      val txnMgr = state.initTxnMgr(conf)
       ctx.setHiveTxnManager(txnMgr)
+      val parser = new ParseDriver
+      val tree = ParseUtils.findRootNonNullToken(parser.parse(sql, ctx))
+      val analyzer = SemanticAnalyzerFactory.get(conf, tree)
       analyzer.analyze(tree, ctx)
 
       if (!analyzer.skipAuthorization()) {
