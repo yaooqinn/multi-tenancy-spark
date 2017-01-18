@@ -434,12 +434,23 @@ private[client] class Shim_v0_12 extends Shim with Logging {
     if (conf.getBoolVar(HiveConf.ConfVars.HIVE_AUTHORIZATION_ENABLED)) {
       val origin = Thread.currentThread().getContextClassLoader
       Thread.currentThread().setContextClassLoader(state.getClass.getClassLoader)
+
+      val scanCols = conf.getBoolVar(HiveConf.ConfVars.HIVE_STATS_COLLECT_SCANCOLS)
+      val runCBO = conf.getBoolVar(HiveConf.ConfVars.HIVE_CBO_ENABLED)
+      val limit = conf.getIntVar(HiveConf.ConfVars.HIVELIMITTABLESCANPARTITION)
+      conf.setBoolVar(HiveConf.ConfVars.HIVE_STATS_COLLECT_SCANCOLS, false)
+      conf.setBoolVar(HiveConf.ConfVars.HIVE_CBO_ENABLED, false)
+      conf.setIntVar(HiveConf.ConfVars.HIVELIMITTABLESCANPARTITION, -1)
+
       val ctx = new Context(conf)
+      val txnMgr = state.initTxnMgr(conf)
+
       ctx.setTryCount(Int.MaxValue)
       ctx.setHDFSCleanup(true)
       ctx.setCmd(sql)
-      val txnMgr = state.initTxnMgr(conf)
       ctx.setHiveTxnManager(txnMgr)
+//      ctx.setExplainLogical(true)
+
       val parser = new ParseDriver
       val tree = ParseUtils.findRootNonNullToken(parser.parse(sql, ctx))
       val analyzer = SemanticAnalyzerFactory.get(conf, tree)
@@ -455,6 +466,10 @@ private[client] class Shim_v0_12 extends Shim with Logging {
           state.setCurrentDatabase(db)
         case _ =>
       }
+
+      conf.setBoolVar(HiveConf.ConfVars.HIVE_STATS_COLLECT_SCANCOLS, scanCols)
+      conf.setBoolVar(HiveConf.ConfVars.HIVE_CBO_ENABLED, runCBO)
+      conf.setIntVar(HiveConf.ConfVars.HIVELIMITTABLESCANPARTITION, limit)
       Thread.currentThread().setContextClassLoader(origin)
     }
   }
