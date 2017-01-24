@@ -33,7 +33,7 @@ import org.apache.spark.SparkContext
 import org.apache.spark.annotation.DeveloperApi
 import org.apache.spark.internal.Logging
 import org.apache.spark.scheduler.{SparkListener, SparkListenerApplicationEnd, SparkListenerJobStart}
-import org.apache.spark.sql.SQLContext
+import org.apache.spark.sql.{RuntimeConfig, SparkSession}
 import org.apache.spark.sql.hive.HiveUtils
 import org.apache.spark.sql.hive.thriftserver.ReflectionUtils._
 import org.apache.spark.sql.hive.thriftserver.ui.ThriftServerTab
@@ -54,19 +54,19 @@ object HiveThriftServer2 extends Logging {
    * Starts a new thrift server with the given context.
    */
   @DeveloperApi
-  def startWithContext(sqlContext: SQLContext): Unit = {
-    val server = new HiveThriftServer2(sqlContext)
+  def startWithContext(sparkSession: SparkSession): Unit = {
+    val server = new HiveThriftServer2(sparkSession)
 
     val executionHive = HiveUtils.newClientForExecution(
-      sqlContext.sparkContext.conf,
-      sqlContext.sessionState.newHadoopConf())
+      sparkSession.sparkContext.conf,
+      sparkSession.sessionState.newHadoopConf())
 
     server.init(executionHive.conf)
     server.start()
-    listener = new HiveThriftServer2Listener(server, sqlContext.conf)
-    sqlContext.sparkContext.addSparkListener(listener)
-    uiTab = if (sqlContext.sparkContext.getConf.getBoolean("spark.ui.enabled", true)) {
-      Some(new ThriftServerTab(sqlContext.sparkContext))
+    listener = new HiveThriftServer2Listener(server, sparkSession.conf)
+    sparkSession.sparkContext.addSparkListener(listener)
+    uiTab = if (sparkSession.sparkContext.getConf.getBoolean("spark.ui.enabled", true)) {
+      Some(new ThriftServerTab(sparkSession.sparkContext))
     } else {
       None
     }
@@ -86,24 +86,25 @@ object HiveThriftServer2 extends Logging {
     }
 
     val executionHive = HiveUtils.newClientForExecution(
-      SparkSQLEnv.sqlContext.sparkContext.conf,
-      SparkSQLEnv.sqlContext.sessionState.newHadoopConf())
+      SparkSQLEnv.sparkSession.sparkContext.conf,
+      SparkSQLEnv.sparkSession.sessionState.newHadoopConf())
 
     try {
-      val server = new HiveThriftServer2(SparkSQLEnv.sqlContext)
+      val server = new HiveThriftServer2(SparkSQLEnv.sparkSession)
       server.init(executionHive.conf)
       server.start()
       logInfo("HiveThriftServer2 started")
-      listener = new HiveThriftServer2Listener(server, SparkSQLEnv.sqlContext.conf)
-      SparkSQLEnv.sparkContext.addSparkListener(listener)
-      uiTab = if (SparkSQLEnv.sparkContext.getConf.getBoolean("spark.ui.enabled", true)) {
-        Some(new ThriftServerTab(SparkSQLEnv.sparkContext))
+      listener = new HiveThriftServer2Listener(server, SparkSQLEnv.sparkSession.conf)
+      SparkSQLEnv.sparkSession.sparkContext.addSparkListener(listener)
+      uiTab =
+        if (SparkSQLEnv.sparkSession.sparkContext.getConf.getBoolean("spark.ui.enabled", true)) {
+        Some(new ThriftServerTab(SparkSQLEnv.sparkSession.sparkContext))
       } else {
         None
       }
       // If application was killed before HiveThriftServer2 start successfully then SparkSubmit
       // process can not exit, so check whether if SparkContext was stopped.
-      if (SparkSQLEnv.sparkContext.stopped.get()) {
+      if (SparkSQLEnv.sparkSession.sparkContext.stopped.get()) {
         logError("SparkContext has stopped even if HiveServer2 has started, so exit")
         System.exit(-1)
       }
@@ -161,7 +162,7 @@ object HiveThriftServer2 extends Logging {
    */
   private[thriftserver] class HiveThriftServer2Listener(
       val server: HiveServer2,
-      val conf: SQLConf) extends SparkListener {
+      val conf: RuntimeConfig) extends SparkListener {
 
     override def onApplicationEnd(applicationEnd: SparkListenerApplicationEnd): Unit = {
       server.stop()
@@ -169,8 +170,8 @@ object HiveThriftServer2 extends Logging {
     private var onlineSessionNum: Int = 0
     private val sessionList = new mutable.LinkedHashMap[String, SessionInfo]
     private val executionList = new mutable.LinkedHashMap[String, ExecutionInfo]
-    private val retainedStatements = conf.getConf(SQLConf.THRIFTSERVER_UI_STATEMENT_LIMIT)
-    private val retainedSessions = conf.getConf(SQLConf.THRIFTSERVER_UI_SESSION_LIMIT)
+    private val retainedStatements = conf.get(SQLConf.THRIFTSERVER_UI_STATEMENT_LIMIT)
+    private val retainedSessions = conf.get(SQLConf.THRIFTSERVER_UI_SESSION_LIMIT)
     private var totalRunning = 0
 
     def getOnlineSessionNum: Int = synchronized { onlineSessionNum }
@@ -269,7 +270,7 @@ object HiveThriftServer2 extends Logging {
   }
 }
 
-private[hive] class HiveThriftServer2(sqlContext: SQLContext)
+private[hive] class HiveThriftServer2(sparkSession: SparkSession)
   extends HiveServer2
   with ReflectedCompositeService {
   // state is tracked internally so that the server only attempts to shut down if it successfully
@@ -277,7 +278,7 @@ private[hive] class HiveThriftServer2(sqlContext: SQLContext)
   private val started = new AtomicBoolean(false)
 
   override def init(hiveConf: HiveConf) {
-    val sparkSqlCliService = new SparkSQLCLIService(this, sqlContext)
+    val sparkSqlCliService = new SparkSQLCLIService(this, sparkSession)
     setSuperField(this, "cliService", sparkSqlCliService)
     addService(sparkSqlCliService)
 

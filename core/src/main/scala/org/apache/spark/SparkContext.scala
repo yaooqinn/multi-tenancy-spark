@@ -70,7 +70,7 @@ import org.apache.spark.util._
  * @param config a Spark Config object describing the application configuration. Any settings in
  *   this config overrides the default configs as well as system properties.
  */
-class SparkContext(config: SparkConf) extends Logging {
+class SparkContext(config: SparkConf, user: Option[String]) extends Logging {
 
   // The call site where this SparkContext was constructed.
   private val creationSite: CallSite = Utils.getCallSite()
@@ -114,7 +114,9 @@ class SparkContext(config: SparkConf) extends Logging {
    * Create a SparkContext that loads settings from system properties (for instance, when
    * launching with ./bin/spark-submit).
    */
-  def this() = this(new SparkConf())
+  def this() = this(new SparkConf(), None)
+
+  def this(conf: SparkConf) = this(conf, None)
 
   /**
    * Alternative constructor that allows setting common Spark properties directly
@@ -124,7 +126,7 @@ class SparkContext(config: SparkConf) extends Logging {
    * @param conf a [[org.apache.spark.SparkConf]] object specifying other Spark parameters
    */
   def this(master: String, appName: String, conf: SparkConf) =
-    this(SparkContext.updatedConf(conf, master, appName))
+    this(SparkContext.updatedConf(conf, master, appName), None)
 
   /**
    * Alternative constructor that allows setting common Spark properties directly
@@ -142,7 +144,9 @@ class SparkContext(config: SparkConf) extends Logging {
       sparkHome: String = null,
       jars: Seq[String] = Nil,
       environment: Map[String, String] = Map()) = {
-    this(SparkContext.updatedConf(new SparkConf(), master, appName, sparkHome, jars, environment))
+    this(
+      SparkContext.updatedConf(new SparkConf(), master, appName, sparkHome, jars, environment),
+      None)
   }
 
   // NOTE: The below constructors could be consolidated using default arguments. Due to
@@ -292,7 +296,7 @@ class SparkContext(config: SparkConf) extends Logging {
   private[spark] val executorEnvs = HashMap[String, String]()
 
   // Set SPARK_USER for user who is running SparkContext.
-  val sparkUser = Utils.getCurrentUserName()
+  val sparkUser = user.getOrElse(Utils.getCurrentUserName())
 
   private[spark] def schedulerBackend: SchedulerBackend = _schedulerBackend
 
@@ -2277,7 +2281,7 @@ object SparkContext extends Logging {
             s"The currently running SparkContext was created at:\n${ctx.creationSite.longForm}"
           val exception = new SparkException(errMsg)
           if (allowMultipleContexts) {
-            logWarning("Multiple running SparkContexts detected in the same JVM!", exception)
+            logWarning("Multiple running SparkContexts detected in the same JVM!")
           } else {
             throw exception
           }
@@ -2310,7 +2314,7 @@ object SparkContext extends Logging {
     // from assertNoOtherContextIsRunning within setActiveContext
     SPARK_CONTEXT_CONSTRUCTOR_LOCK.synchronized {
       if (activeContext.get() == null) {
-        setActiveContext(new SparkContext(config), allowMultipleContexts = false)
+        setActiveContext(new SparkContext(config, None), allowMultipleContexts = false)
       } else {
         if (config.getAll.nonEmpty) {
           logWarning("Using an existing SparkContext; some configuration may not take effect.")

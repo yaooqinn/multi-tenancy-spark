@@ -61,8 +61,9 @@ private[hive] object SparkSQLCLIDriver extends Logging {
     HiveInterruptUtils.add(new HiveInterruptCallback {
       override def interrupt() {
         // Handle remote execution mode
-        if (SparkSQLEnv.sparkContext != null) {
-          SparkSQLEnv.sparkContext.cancelAllJobs()
+        val sparkContext = SparkSQLEnv.sparkSession.sparkContext
+        if (sparkContext != null) {
+          sparkContext.cancelAllJobs()
         } else {
           if (transport != null) {
             // Force closing of TCP connection upon session termination
@@ -149,7 +150,7 @@ private[hive] object SparkSQLCLIDriver extends Logging {
     }
 
     if (sessionState.database != null) {
-      SparkSQLEnv.sqlContext.sessionState.catalog.setCurrentDatabase(
+      SparkSQLEnv.sparkSession.sessionState.catalog.setCurrentDatabase(
         s"${sessionState.database}")
     }
 
@@ -161,7 +162,7 @@ private[hive] object SparkSQLCLIDriver extends Logging {
     val it = sessionState.getOverriddenConfigurations.entrySet().iterator()
     while (it.hasNext) {
       val kv = it.next()
-      SparkSQLEnv.sqlContext.setConf(kv.getKey, kv.getValue)
+      SparkSQLEnv.sparkSession.conf.set(kv.getKey, kv.getValue)
     }
 
     if (sessionState.execString != null) {
@@ -292,7 +293,7 @@ private[hive] class SparkSQLCLIDriver extends CliDriver with Logging {
   }
 
   override def setHiveVariables(hiveVariables: java.util.Map[String, String]): Unit = {
-    hiveVariables.asScala.foreach(kv => SparkSQLEnv.sqlContext.conf.setConfString(kv._1, kv._2))
+    hiveVariables.asScala.foreach(kv => SparkSQLEnv.sparkSession.conf.set(kv._1, kv._2))
   }
 
   override def processCmd(cmd: String): Int = {

@@ -26,7 +26,8 @@ import scala.reflect.ClassTag
 import scala.reflect.runtime.universe.TypeTag
 import scala.util.control.NonFatal
 
-import org.apache.spark.{SPARK_VERSION, SparkConf, SparkContext}
+
+import org.apache.spark.{SparkConf, SparkContext, SPARK_VERSION}
 import org.apache.spark.annotation.{DeveloperApi, Experimental, InterfaceStability}
 import org.apache.spark.api.java.JavaRDD
 import org.apache.spark.internal.Logging
@@ -44,7 +45,7 @@ import org.apache.spark.sql.internal.{CatalogImpl, SessionState, SharedState}
 import org.apache.spark.sql.internal.StaticSQLConf.CATALOG_IMPLEMENTATION
 import org.apache.spark.sql.sources.BaseRelation
 import org.apache.spark.sql.streaming._
-import org.apache.spark.sql.types.{DataType, LongType, StructType}
+import org.apache.spark.sql.types.{DataType, StructType}
 import org.apache.spark.sql.util.ExecutionListenerManager
 import org.apache.spark.util.Utils
 
@@ -891,7 +892,35 @@ object SparkSession {
 
       return session
     }
+
+    /**
+     * Create a new [[SparkSession]] with user supplied [[SparkContext]]
+     * @param sc
+     * @return
+     */
+    def createWithContext(sc: SparkContext): SparkSession = synchronized {
+      assert(sc.conf.get("spark.driver.allowMultipleContexts", "false") == "true",
+        "This method can only be called when `allowMultipleContexts`")
+
+      val randomAppName = java.util.UUID.randomUUID().toString
+      options.foreach { case (k, v) => sc.conf.set(k, v) }
+      if (!sc.conf.contains("spark.app.name")) {
+        sc.conf.setAppName(randomAppName)
+      }
+      val session = new SparkSession(sc)
+      options.foreach { case (k, v) => session.sessionState.conf.setConfString(k, v) }
+
+      sc.addSparkListener(new SparkListener {
+        override def onApplicationEnd(applicationEnd: SparkListenerApplicationEnd): Unit = {
+          defaultSession.set(null)
+          sqlListener.set(null)
+        }
+      })
+      session
+    }
   }
+
+
 
   /**
    * Creates a [[SparkSession.Builder]] for constructing a [[SparkSession]].

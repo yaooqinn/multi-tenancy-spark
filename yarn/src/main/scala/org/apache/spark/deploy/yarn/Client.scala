@@ -47,7 +47,7 @@ import org.apache.hadoop.yarn.conf.YarnConfiguration
 import org.apache.hadoop.yarn.exceptions.ApplicationNotFoundException
 import org.apache.hadoop.yarn.util.Records
 
-import org.apache.spark.{SecurityManager, SparkConf, SparkContext, SparkException}
+import org.apache.spark.{SecurityManager, SparkConf, SparkException}
 import org.apache.spark.deploy.SparkHadoopUtil
 import org.apache.spark.deploy.yarn.config._
 import org.apache.spark.deploy.yarn.security.ConfigurableCredentialManager
@@ -72,6 +72,8 @@ private[spark] class Client(
   private val yarnConf = new YarnConfiguration(hadoopConf)
 
   private val isClusterMode = sparkConf.get("spark.submit.deployMode", "client") == "cluster"
+
+  private var sparkUser: Option[String] = None
 
   // AM related configurations
   private val amMemory = if (isClusterMode) {
@@ -141,7 +143,7 @@ private[spark] class Client(
    * creating applications and setting up the application submission context. This was not
    * available in the alpha API.
    */
-  def submitApplication(): ApplicationId = {
+  def submitApplication(user: Option[String] = None): ApplicationId = {
     var appId: ApplicationId = null
     try {
       launcherBackend.connect()
@@ -150,6 +152,7 @@ private[spark] class Client(
       setupCredentials()
       yarnClient.init(yarnConf)
       yarnClient.start()
+      sparkUser = user
 
       logInfo("Requesting a new application from cluster with %d NodeManagers"
         .format(yarnClient.getYarnClusterMetrics.getNumNodeManagers))
@@ -755,7 +758,8 @@ private[spark] class Client(
     populateClasspath(args, yarnConf, sparkConf, env, sparkConf.get(DRIVER_CLASS_PATH))
     env("SPARK_YARN_MODE") = "true"
     env("SPARK_YARN_STAGING_DIR") = stagingDirPath.toString
-    env("SPARK_USER") = UserGroupInformation.getCurrentUser().getShortUserName()
+    env("SPARK_USER") =
+      sparkUser.getOrElse(UserGroupInformation.getCurrentUser().getShortUserName())
     if (loginFromKeytab) {
       val credentialsFile = "credentials-" + UUID.randomUUID().toString
       sparkConf.set(CREDENTIALS_FILE_PATH, new Path(stagingDirPath, credentialsFile).toString)

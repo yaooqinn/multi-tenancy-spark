@@ -23,21 +23,26 @@ import java.util.concurrent.Executors
 import org.apache.commons.logging.Log
 import org.apache.hadoop.hive.conf.HiveConf
 import org.apache.hadoop.hive.conf.HiveConf.ConfVars
+import org.apache.hadoop.security.UserGroupInformation
 import org.apache.hive.service.cli.SessionHandle
 import org.apache.hive.service.cli.session.SessionManager
 import org.apache.hive.service.cli.thrift.TProtocolVersion
 import org.apache.hive.service.server.HiveServer2
 
-import org.apache.spark.sql.SQLContext
+import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.hive.{HiveSessionState, HiveUtils}
 import org.apache.spark.sql.hive.thriftserver.ReflectionUtils._
 import org.apache.spark.sql.hive.thriftserver.server.SparkSQLOperationManager
 
-private[hive] class SparkSQLSessionManager(hiveServer: HiveServer2, sqlContext: SQLContext)
+private[hive] class SparkSQLSessionManager(hiveServer: HiveServer2, sparkSession: SparkSession)
   extends SessionManager(hiveServer)
   with ReflectedCompositeService {
 
   private lazy val sparkSqlOperationManager = new SparkSQLOperationManager()
+
+  private lazy val contextMgr = new SparkSessionManager
+
+  private val defaultUser = UserGroupInformation.getCurrentUser.getShortUserName
 
   override def init(hiveConf: HiveConf) {
     setSuperField(this, "hiveConf", hiveConf)
@@ -72,44 +77,56 @@ private[hive] class SparkSQLSessionManager(hiveServer: HiveServer2, sqlContext: 
     val session = super.getSession(sessionHandle)
     HiveThriftServer2.listener.onSessionCreated(
       session.getIpAddress, sessionHandle.getSessionId.toString, session.getUsername)
-    val sessionState = sqlContext.sessionState.asInstanceOf[HiveSessionState]
-    val ctx = if (sessionState.hiveThriftServerSingleSession) {
-      sqlContext
+    val sessionState = sparkSession.sessionState.asInstanceOf[HiveSessionState]
+
+    // mapred.job.queue.name
+    val queue = if (sessionConf != null && sessionConf.containsKey("set:hiveconf:mapred.job.queue.name")) {
+      sessionConf.get("set:hiveconf:mapred.job.queue.name")
     } else {
-      sqlContext.newSession()
+      "default"
     }
 
+    val ss = if (sessionState.hiveThriftServerSingleSession) {
+      sparkSession
+    } else if (username == defaultUser || username == null) {
+      sparkSession.newSession()
+    } else {
+      contextMgr.getSessionOrCreate(sessionHandle, username, queue)
+    }
+
+    // ranger.user.name
     var rangerUser: String = null
 
     if (sessionConf != null && sessionConf.containsKey("set:hivevar:ranger.user.name")) {
       rangerUser = sessionConf.get("set:hivevar:ranger.user.name")
       val statement = s"set hivevar:ranger.user.name = $rangerUser"
-      ctx.sql(statement)
+      ss.sql(statement)
     }
     val metastoreUser = if (rangerUser == null) username else rangerUser
     val client = HiveUtils.newClientForMetadata(
-      sqlContext.sparkContext.conf,
-      sqlContext.sparkContext.hadoopConfiguration,
+      sparkSession.sparkContext.conf,
+      sparkSession.sparkContext.hadoopConfiguration,
       metastoreUser)
 
-    ctx.setConf("spark.sql.hive.version", HiveUtils.hiveExecutionVersion)
+    ss.conf.set("spark.sql.hive.version", HiveUtils.hiveExecutionVersion)
     if (sessionConf != null && sessionConf.containsKey("use:database")) {
       val statement = s"use ${sessionConf.get("use:database")}"
       if (rangerUser != null) {
         client.authorize(statement)
       }
-      ctx.sql(statement)
+      ss.sql(statement)
     }
-    sparkSqlOperationManager.sessionToContexts.put(sessionHandle, ctx)
+    sparkSqlOperationManager.sessionToSparkSession.put(sessionHandle, ss)
     sparkSqlOperationManager.sessionToClient.put(sessionHandle, client)
     sessionHandle
   }
 
   override def closeSession(sessionHandle: SessionHandle) {
     HiveThriftServer2.listener.onSessionClosed(sessionHandle.getSessionId.toString)
+    contextMgr.closeSession(sessionHandle)
     super.closeSession(sessionHandle)
     sparkSqlOperationManager.sessionToActivePool.remove(sessionHandle)
-    sparkSqlOperationManager.sessionToContexts.remove(sessionHandle)
+    sparkSqlOperationManager.sessionToSparkSession.remove(sessionHandle)
     sparkSqlOperationManager.sessionToClient.remove(sessionHandle)
   }
 }
