@@ -32,7 +32,7 @@ import org.apache.spark.sql.SparkSession
  * it using the existing [[SparkContext]]. Otherwise, a [[SparkContext]] will be initialized with
  * the proxy user and the yarn queue if specified.
  */
-private[thriftserver] class SparkSessionManager extends Logging{
+private[thriftserver] class SparkSessionManager extends Logging {
 
   private val userToSparkSession = new ConcurrentHashMap[String, SparkSession]
   private val sessionToUser = new ConcurrentHashMap[SessionHandle, String]
@@ -72,11 +72,16 @@ private[thriftserver] class SparkSessionManager extends Logging{
       conf.setAppName(maybeAppName.getOrElse(s"SPARK-SQL::$user::$queue"))
       val sparkContext = new SparkContext(conf, Some(user))
       sessionToUser.put(sessionHandle, user)
-      val ss = SparkSession.builder().enableHiveSupport().createWithContext(sparkContext)
+      val ss =
+        SparkSession
+          .builder()
+          .enableHiveSupport()
+          .createWithContext(sparkContext)
 
       userToNum.put(user, 1)
       sessionToUser.put(sessionHandle, user)
       userToSparkSession.put(user, ss)
+      ss
     }
   }
 
