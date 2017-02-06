@@ -69,6 +69,7 @@ import org.apache.spark.util._
  *
  * @param config a Spark Config object describing the application configuration. Any settings in
  *   this config overrides the default configs as well as system properties.
+ * @param user a user who owns this instance of [[SparkContext]]
  */
 class SparkContext(config: SparkConf, user: Option[String]) extends Logging {
 
