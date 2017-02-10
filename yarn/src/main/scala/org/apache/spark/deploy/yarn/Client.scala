@@ -18,16 +18,17 @@
 package org.apache.spark.deploy.yarn
 
 import java.io.{File, FileOutputStream, IOException, OutputStreamWriter}
-import java.net.{InetAddress, UnknownHostException, URI}
+import java.net.{InetAddress, URI, UnknownHostException}
 import java.nio.ByteBuffer
 import java.nio.charset.StandardCharsets
 import java.util.{Properties, UUID}
 import java.util.zip.{ZipEntry, ZipOutputStream}
-
 import scala.collection.JavaConverters._
 import scala.collection.mutable.{ArrayBuffer, HashMap, HashSet, ListBuffer, Map}
 import scala.util.{Failure, Success, Try}
 import scala.util.control.NonFatal
+
+import org.apache.commons.io.FileUtils
 
 import com.google.common.base.Objects
 import com.google.common.io.Files
@@ -149,7 +150,7 @@ private[spark] class Client(
       launcherBackend.connect()
       // Setup the credentials before doing anything else,
       // so we have don't have issues at any point.
-      setupCredentials()
+      setupCredentials(user)
       yarnClient.init(yarnConf)
       yarnClient.start()
       sparkUser = user
@@ -266,6 +267,7 @@ private[spark] class Client(
           val setResourceRequestMethod =
             appContext.getClass.getMethod("setAMContainerResourceRequest", classOf[ResourceRequest])
           setResourceRequestMethod.invoke(appContext, amRequest)
+          appContext.setAMContainerResourceRequest(amRequest)
         } catch {
           case e: NoSuchMethodException =>
             logWarning(s"Ignoring ${AM_NODE_LABEL_EXPRESSION.key} because the version " +
@@ -758,8 +760,13 @@ private[spark] class Client(
     populateClasspath(args, yarnConf, sparkConf, env, sparkConf.get(DRIVER_CLASS_PATH))
     env("SPARK_YARN_MODE") = "true"
     env("SPARK_YARN_STAGING_DIR") = stagingDirPath.toString
-    env("SPARK_USER") =
-      sparkUser.getOrElse(UserGroupInformation.getCurrentUser().getShortUserName())
+    sparkUser match {
+      case Some(user) =>
+        env("HADOOP_PROXY_USER") = user
+        env("SPARK_USER") = user
+      case _ =>
+        env("SPARK_USER") = UserGroupInformation.getCurrentUser().getShortUserName()
+    }
     if (loginFromKeytab) {
       val credentialsFile = "credentials-" + UUID.randomUUID().toString
       sparkConf.set(CREDENTIALS_FILE_PATH, new Path(stagingDirPath, credentialsFile).toString)
@@ -1021,7 +1028,7 @@ private[spark] class Client(
     amContainer
   }
 
-  def setupCredentials(): Unit = {
+  def setupCredentials(user: Option[String]): Unit = {
     loginFromKeytab = sparkConf.contains(PRINCIPAL.key)
     if (loginFromKeytab) {
       principal = sparkConf.get(PRINCIPAL).get
@@ -1038,7 +1045,14 @@ private[spark] class Client(
       sparkConf.set(PRINCIPAL.key, principal)
     }
     // Defensive copy of the credentials
-    credentials = new Credentials(UserGroupInformation.getCurrentUser.getCredentials)
+    val cred = user match {
+      case Some(u) if (UserGroupInformation.getCurrentUser.getShortUserName != u) =>
+        UserGroupInformation
+          .createProxyUser(u, UserGroupInformation.getCurrentUser)
+          .getCredentials
+      case _ => UserGroupInformation.getCurrentUser.getCredentials
+    }
+    credentials = new Credentials(cred)
   }
 
   /**

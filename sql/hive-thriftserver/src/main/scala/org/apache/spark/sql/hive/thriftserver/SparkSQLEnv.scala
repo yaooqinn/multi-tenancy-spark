@@ -30,6 +30,7 @@ private[hive] object SparkSQLEnv extends Logging {
   logDebug("Initializing SparkSQLEnv")
 
   var sparkSession: SparkSession = _
+  var conf: SparkConf = _
 
   def init() {
     if (sparkSession == null) {
@@ -44,6 +45,8 @@ private[hive] object SparkSQLEnv extends Logging {
         .setAppName(maybeAppName.getOrElse(s"SparkSQL::${Utils.localHostName()}"))
 
       sparkSession = SparkSession.builder.config(sparkConf).enableHiveSupport().getOrCreate()
+
+      conf = sparkConf.clone
 
       val sessionState = sparkSession.sessionState.asInstanceOf[HiveSessionState]
       sessionState.metadataHive.setOut(new PrintStream(System.out, true, "UTF-8"))

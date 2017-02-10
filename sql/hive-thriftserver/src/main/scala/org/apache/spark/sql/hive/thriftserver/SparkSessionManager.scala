@@ -21,7 +21,7 @@ import java.util.concurrent.ConcurrentHashMap
 
 import org.apache.hive.service.cli.SessionHandle
 
-import org.apache.spark.{SparkConf, SparkContext}
+import org.apache.spark.SparkContext
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.SparkSession
 
@@ -62,7 +62,7 @@ private[thriftserver] class SparkSessionManager extends Logging {
       ss
     } else {
       logInfo(s"Starting a new SparkContext in QUEUE: [$queue] for proxy-user $user")
-      val conf = new SparkConf
+      val conf = SparkSQLEnv.conf
       // If user doesn't specify the appName, we want to get [SparkSQL::localHostName] instead of
       // the default appName [SparkSQLCLIDriver] in cli or beeline.
       val maybeAppName = conf.getOption("spark.app.name")
