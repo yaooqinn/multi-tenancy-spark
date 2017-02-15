@@ -25,6 +25,7 @@ import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.security.Credentials
 
 import org.apache.spark.SparkConf
+import org.apache.spark.deploy.SparkHadoopUtil
 import org.apache.spark.internal.Logging
 import org.apache.spark.util.Utils
 
@@ -101,5 +102,20 @@ private[yarn] final class ConfigurableCredentialManager(
    */
   def credentialUpdater(): CredentialUpdater = {
     new CredentialUpdater(sparkConf, hadoopConf, this)
+  }
+}
+
+private[yarn] object ConfigurableCredentialManager {
+  var credentialManager: Option[ConfigurableCredentialManager] = None
+
+  def apply(sparkConf: SparkConf): ConfigurableCredentialManager = {
+    val hadoopConf = SparkHadoopUtil.get.newConfiguration(sparkConf)
+    val ccm = new ConfigurableCredentialManager(sparkConf, hadoopConf)
+    credentialManager = Some(ccm)
+    ccm
+  }
+
+  def getOrCreate(sparkConf: SparkConf): ConfigurableCredentialManager = {
+    credentialManager.getOrElse(ConfigurableCredentialManager(sparkConf))
   }
 }

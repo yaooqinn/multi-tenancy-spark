@@ -104,8 +104,8 @@ private[hive] class SparkSQLSessionManager(hiveServer: HiveServer2, sparkSession
     }
     val metastoreUser = if (rangerUser == null) username else rangerUser
     val client = HiveUtils.newClientForMetadata(
-      sparkSession.sparkContext.conf,
-      sparkSession.sparkContext.hadoopConfiguration,
+      ss.sparkContext.conf,
+      ss.sparkContext.hadoopConfiguration,
       metastoreUser)
 
     ss.conf.set("spark.sql.hive.version", HiveUtils.hiveExecutionVersion)

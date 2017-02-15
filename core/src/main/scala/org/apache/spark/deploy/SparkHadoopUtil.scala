@@ -49,6 +49,8 @@ class SparkHadoopUtil extends Logging {
   private val sparkConf = new SparkConf(false).loadFromSystemProperties(true)
   val conf: Configuration = newConfiguration(sparkConf)
   UserGroupInformation.setConfiguration(conf)
+  
+  private var _isLoginedWithKeyTab = false
 
   /**
    * Runs the given function with a Hadoop UserGroupInformation as a thread local variable
@@ -66,6 +68,14 @@ class SparkHadoopUtil extends Logging {
     ugi.doAs(new PrivilegedExceptionAction[Unit] {
       def run: Unit = func()
     })
+  }
+
+  def createProxyUser(user: String): UserGroupInformation = {
+    val currentUser = UserGroupInformation.getCurrentUser
+    log.info("Current logged-in user is " + currentUser.getUserName)
+    val proxyUser = UserGroupInformation.createProxyUser(user, currentUser)
+    transferCredentials(currentUser, proxyUser)
+    proxyUser
   }
 
   def transferCredentials(source: UserGroupInformation, dest: UserGroupInformation) {
@@ -135,7 +145,10 @@ class SparkHadoopUtil extends Logging {
 
   def loginUserFromKeytab(principalName: String, keytabFilename: String) {
     UserGroupInformation.loginUserFromKeytab(principalName, keytabFilename)
+    _isLoginedWithKeyTab = true
   }
+  
+  def isLoginedWithKeyTab(): Boolean = _isLoginedWithKeyTab
 
   /**
    * Returns a function that can be called to find Hadoop FileSystem bytes read. If

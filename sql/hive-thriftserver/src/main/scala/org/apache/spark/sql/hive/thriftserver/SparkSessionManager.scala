@@ -17,11 +17,13 @@
 
 package org.apache.spark.sql.hive.thriftserver
 
+import java.security.PrivilegedExceptionAction
 import java.util.concurrent.ConcurrentHashMap
 
 import org.apache.hive.service.cli.SessionHandle
 
-import org.apache.spark.SparkContext
+import org.apache.spark.{SparkConf, SparkContext}
+import org.apache.spark.deploy.SparkHadoopUtil
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.SparkSession
 
@@ -33,6 +35,8 @@ import org.apache.spark.sql.SparkSession
  * the proxy user and the yarn queue if specified.
  */
 private[thriftserver] class SparkSessionManager extends Logging {
+
+  private val sparkConfPairs = SparkSQLEnv.originalConf.getAll
 
   private val userToSparkSession = new ConcurrentHashMap[String, SparkSession]
   private val sessionToUser = new ConcurrentHashMap[SessionHandle, String]
@@ -61,8 +65,8 @@ private[thriftserver] class SparkSessionManager extends Logging {
       userToNum.put(user, userToNum.get(user) + 1)
       ss
     } else {
-      logInfo(s"Starting a new SparkContext in QUEUE: [$queue] for proxy-user $user")
-      val conf = SparkSQLEnv.conf
+      logInfo(s"Starting a new SparkContext in QUEUE: [$queue] for proxy-user [$user]")
+      val conf = SparkSQLEnv.originalConf
       // If user doesn't specify the appName, we want to get [SparkSQL::localHostName] instead of
       // the default appName [SparkSQLCLIDriver] in cli or beeline.
       val maybeAppName = conf.getOption("spark.app.name")
@@ -70,18 +74,23 @@ private[thriftserver] class SparkSessionManager extends Logging {
       conf.set("spark.yarn.queue", queue)
       conf.set("spark.driver.allowMultipleContexts", "true")
       conf.setAppName(maybeAppName.getOrElse(s"SPARK-SQL::$user::$queue"))
-      val sparkContext = new SparkContext(conf, Some(user))
-      sessionToUser.put(sessionHandle, user)
-      val ss =
-        SparkSession
-          .builder()
-          .enableHiveSupport()
-          .createWithContext(sparkContext)
+      conf.set("spark.yarn.proxy.enabled", "true")
+      val proxyUser = SparkHadoopUtil.get.createProxyUser(user)
+      proxyUser.doAs(new PrivilegedExceptionAction[Unit]() {
+        override def run(): Unit = {
+          val sparkContext = new SparkContext(conf, Some(user))
+          val ss =
+            SparkSession
+              .builder()
+              .enableHiveSupport()
+              .createWithContext(sparkContext)
 
-      userToNum.put(user, 1)
-      sessionToUser.put(sessionHandle, user)
-      userToSparkSession.put(user, ss)
-      ss
+          userToNum.put(user, 1)
+          sessionToUser.put(sessionHandle, user)
+          userToSparkSession.put(user, ss)
+        }
+      })
+      userToSparkSession.get(user)
     }
   }
 
@@ -114,6 +123,42 @@ private[thriftserver] class SparkSessionManager extends Logging {
         }
       }
     }
+  }
+
+  def createSparkConf(): SparkConf = {
+
+    // Reload properties for the checkpoint application since user wants to set a reload property
+    // or spark had changed its value and user wants to set it back.
+    val propertiesToReload = List(
+      "spark.yarn.app.id",
+      "spark.yarn.app.attemptId",
+      "spark.driver.host",
+      "spark.driver.port",
+      "spark.master",
+      "spark.yarn.keytab",
+      "spark.yarn.principal",
+      "spark.ui.filters")
+
+    val newSparkConf = new SparkConf(loadDefaults = false).setAll(sparkConfPairs)
+      .remove("spark.driver.host")
+      .remove("spark.driver.port")
+    val newReloadConf = new SparkConf(loadDefaults = true)
+    propertiesToReload.foreach { prop =>
+      newReloadConf.getOption(prop).foreach { value =>
+        newSparkConf.set(prop, value)
+      }
+    }
+
+    // Add Yarn proxy filter specific configurations to the recovered SparkConf
+    val filter = "org.apache.hadoop.yarn.server.webproxy.amfilter.AmIpFilter"
+    val filterPrefix = s"spark.$filter.param."
+    newReloadConf.getAll.foreach { case (k, v) =>
+      if (k.startsWith(filterPrefix) && k.length > filterPrefix.length) {
+        newSparkConf.set(k, v)
+      }
+    }
+
+    newSparkConf
   }
 
 }
