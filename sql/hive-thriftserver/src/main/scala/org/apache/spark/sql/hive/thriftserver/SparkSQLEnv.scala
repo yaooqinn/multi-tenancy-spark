@@ -23,7 +23,6 @@ import org.apache.spark.SparkConf
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.hive.{HiveSessionState, HiveUtils}
-import org.apache.spark.sql.internal.SharedState
 import org.apache.spark.util.Utils
 
 /** A singleton object for the master program. The slaves should not access this. */
@@ -32,11 +31,13 @@ private[hive] object SparkSQLEnv extends Logging {
 
   var sparkSession: SparkSession = _
   var originalConf: SparkConf = _
-  var sharedState: SharedState = _
 
   def init() {
     if (sparkSession == null) {
       val sparkConf = new SparkConf(loadDefaults = true)
+            
+      originalConf = sparkConf.clone
+      
       // If user doesn't specify the appName, we want to get [SparkSQL::localHostName] instead of
       // the default appName [SparkSQLCLIDriver] in cli or beeline.
       val maybeAppName = sparkConf
@@ -47,10 +48,6 @@ private[hive] object SparkSQLEnv extends Logging {
         .setAppName(maybeAppName.getOrElse(s"SparkSQL::${Utils.localHostName()}"))
 
       sparkSession = SparkSession.builder.config(sparkConf).enableHiveSupport().getOrCreate()
-
-      originalConf = sparkConf.clone
-      
-      sharedState = sparkSession.sharedState
 
       val sessionState = sparkSession.sessionState.asInstanceOf[HiveSessionState]
       sessionState.metadataHive.setOut(new PrintStream(System.out, true, "UTF-8"))
