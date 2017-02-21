@@ -24,7 +24,7 @@ import org.apache.commons.logging.Log
 import org.apache.hadoop.hive.conf.HiveConf
 import org.apache.hadoop.hive.conf.HiveConf.ConfVars
 import org.apache.hadoop.security.UserGroupInformation
-import org.apache.hive.service.cli.SessionHandle
+import org.apache.hive.service.cli.{HiveSQLException, SessionHandle}
 import org.apache.hive.service.cli.session.SessionManager
 import org.apache.hive.service.cli.thrift.TProtocolVersion
 import org.apache.hive.service.server.HiveServer2
@@ -92,6 +92,10 @@ private[hive] class SparkSQLSessionManager(hiveServer: HiveServer2, sparkSession
       sparkSession.newSession()
     } else {
       contextMgr.getSessionOrCreate(sessionHandle, username, queue)
+    }
+    
+    if (ss == null) {
+      throw new HiveSQLException("Failed to open new session cause by init sparkSession")
     }
 
     // ranger.user.name

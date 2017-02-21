@@ -2282,7 +2282,7 @@ object SparkContext extends Logging {
             s"The currently running SparkContext was created at:\n${ctx.creationSite.longForm}"
           val exception = new SparkException(errMsg)
           if (allowMultipleContexts) {
-            logWarning("Multiple running SparkContexts detected in the same JVM!")
+            logWarning("Multiple running SparkContexts detected in the same JVM!", exception)
           } else {
             throw exception
           }

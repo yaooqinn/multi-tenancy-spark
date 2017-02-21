@@ -50,8 +50,6 @@ class SparkHadoopUtil extends Logging {
   val conf: Configuration = newConfiguration(sparkConf)
   UserGroupInformation.setConfiguration(conf)
   
-  private var _isLoginedWithKeyTab = false
-
   /**
    * Runs the given function with a Hadoop UserGroupInformation as a thread local variable
    * (distributed to child threads), used for authenticating HDFS and YARN calls.
@@ -145,11 +143,8 @@ class SparkHadoopUtil extends Logging {
 
   def loginUserFromKeytab(principalName: String, keytabFilename: String) {
     UserGroupInformation.loginUserFromKeytab(principalName, keytabFilename)
-    _isLoginedWithKeyTab = true
   }
   
-  def isLoginedWithKeyTab(): Boolean = _isLoginedWithKeyTab
-
   /**
    * Returns a function that can be called to find Hadoop FileSystem bytes read. If
    * getFSBytesReadOnThreadCallback is called from thread r at time t, the returned callback will
