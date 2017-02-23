@@ -18,7 +18,6 @@
 package org.apache.spark.scheduler
 
 import java.io.NotSerializableException
-import java.security.PrivilegedExceptionAction
 import java.util.Properties
 import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicInteger
@@ -27,8 +26,7 @@ import scala.annotation.tailrec
 import scala.collection.Map
 import scala.collection.mutable.{HashMap, HashSet, Stack}
 import scala.concurrent.duration._
-import scala.language.existentials
-import scala.language.postfixOps
+import scala.language.{existentials, postfixOps}
 import scala.util.control.NonFatal
 
 import org.apache.commons.lang3.SerializationUtils
@@ -1601,32 +1599,13 @@ private[scheduler] class DAGSchedulerEventProcessLoop(dagScheduler: DAGScheduler
 
   private[this] val timer = dagScheduler.metricsSource.messageProcessingTimer
 
-  override def post(event: DAGSchedulerEvent): Unit = {
-    if (dagScheduler.isSecurityEnabled) {
-      event.setupUgi()
-    }
-    super.post(event)
-  }
-
   /**
    * The main event loop of the DAG scheduler.
    */
   override def onReceive(event: DAGSchedulerEvent): Unit = {
     val timerContext = timer.time()
     try {
-      if (dagScheduler.isSecurityEnabled) {
-        val ugiOpt = event.getUgi()
-        ugiOpt match {
-          case Some(ugi) =>
-            ugi.doAs(new PrivilegedExceptionAction[Unit]() {
-              override def run(): Unit = doOnReceive(event)
-            })
-          case _ => doOnReceive(event)
-        }
-
-      } else {
-        doOnReceive(event)
-      }
+      doOnReceive(event)
     } finally {
       timerContext.stop()
     }

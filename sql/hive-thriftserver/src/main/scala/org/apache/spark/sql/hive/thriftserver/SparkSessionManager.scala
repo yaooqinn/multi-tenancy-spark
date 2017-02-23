@@ -102,7 +102,6 @@ private[thriftserver] class SparkSessionManager extends Logging {
     assert(queue != null, "the yarn queue must be specified")
     
     if (isCtxStarted(user)) {
-      this.notifyAll()
       val ss = userToSparkSession.get(user).newSession()
       hiveSessionToUser.put(sessionHandle, user)
       return ss
@@ -116,7 +115,6 @@ private[thriftserver] class SparkSessionManager extends Logging {
       conf.set("spark.yarn.queue", queue)
       conf.set("spark.driver.allowMultipleContexts", "true")
       conf.setAppName(maybeAppName.getOrElse(s"SPARK-SQL::$user::$queue"))
-      conf.set("spark.yarn.proxy.enabled", "true")
       val proxyUser = SparkHadoopUtil.get.createProxyUser(user)
       try {
         proxyUser.doAs(new PrivilegedExceptionAction[Unit]() {
@@ -124,8 +122,10 @@ private[thriftserver] class SparkSessionManager extends Logging {
             val sparkContext = new SparkContext(conf, Some(user))
             tryOrStopSparkContext(sparkContext) {
               val ss =
-                SparkSession.builder().enableHiveSupport().createWithContext(sparkContext)
-          
+                SparkSession
+                  .builder()
+                  .enableHiveSupport()
+                  .createWithContext(sparkContext)
               hiveSessionToUser.put(sessionHandle, user)
               userToSparkSession.put(user, ss)
             }
