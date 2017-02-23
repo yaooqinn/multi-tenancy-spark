@@ -17,8 +17,10 @@
 
 package org.apache.spark.sql.hive.thriftserver
 
-
+import java.util.{Map => JMap}
 import java.util.concurrent.Executors
+
+import scala.collection.JavaConverters._
 
 import org.apache.commons.logging.Log
 import org.apache.hadoop.hive.conf.HiveConf
@@ -44,6 +46,8 @@ private[hive] class SparkSQLSessionManager(hiveServer: HiveServer2, sparkSession
 
   private val defaultUser = UserGroupInformation.getCurrentUser.getShortUserName
 
+  private val defaultQueue = SparkSQLEnv.originalConf.get("spark.yarn.queue", "default")
+
   override def init(hiveConf: HiveConf) {
     setSuperField(this, "hiveConf", hiveConf)
 
@@ -68,7 +72,7 @@ private[hive] class SparkSQLSessionManager(hiveServer: HiveServer2, sparkSession
       username: String,
       passwd: String,
       ipAddress: String,
-      sessionConf: java.util.Map[String, String],
+      sessionConf: JMap[String, String],
       withImpersonation: Boolean,
       delegationToken: String): SessionHandle = {
     val sessionHandle =
@@ -79,47 +83,37 @@ private[hive] class SparkSQLSessionManager(hiveServer: HiveServer2, sparkSession
       session.getIpAddress, sessionHandle.getSessionId.toString, session.getUsername)
     val sessionState = sparkSession.sessionState.asInstanceOf[HiveSessionState]
 
-    // mapred.job.queue.name
-    val queue = if (sessionConf != null && sessionConf.containsKey("set:hiveconf:mapred.job.queue.name")) {
-      sessionConf.get("set:hiveconf:mapred.job.queue.name")
-    } else {
-      "default"
-    }
+    val (rangerUser, queue, database) = configureSession(sessionConf)
 
     val ss = if (sessionState.hiveThriftServerSingleSession) {
       sparkSession
-    } else if (username == defaultUser || username == null) {
+    } else if (!withImpersonation || username == null) {
       sparkSession.newSession()
     } else {
-      contextMgr.getSessionOrCreate(sessionHandle, username, queue)
-    }
-    
-    if (ss == null) {
-      throw new HiveSQLException("Failed to open new session cause by init sparkSession")
+      try {
+        contextMgr.getSessionOrCreate(sessionHandle, username, queue.get)
+      } catch {
+        case e: Exception =>
+          throw new HiveSQLException("Failed to open new session caused by init sparkSession", e)
+      }
     }
 
-    // ranger.user.name
-    var rangerUser: String = null
+    val metastoreUser = rangerUser.getOrElse(username)
 
-    if (sessionConf != null && sessionConf.containsKey("set:hivevar:ranger.user.name")) {
-      rangerUser = sessionConf.get("set:hivevar:ranger.user.name")
-      val statement = s"set hivevar:ranger.user.name = $rangerUser"
-      ss.sql(statement)
-    }
-    val metastoreUser = if (rangerUser == null) username else rangerUser
     val client = HiveUtils.newClientForMetadata(
       ss.sparkContext.conf,
       ss.sparkContext.hadoopConfiguration,
       metastoreUser)
 
     ss.conf.set("spark.sql.hive.version", HiveUtils.hiveExecutionVersion)
-    if (sessionConf != null && sessionConf.containsKey("use:database")) {
-      val statement = s"use ${sessionConf.get("use:database")}"
-      if (rangerUser != null) {
-        client.authorize(statement)
-      }
+
+    if (rangerUser.isDefined) {
+      val statement = s"set hivevar:ranger.user.name = ${rangerUser.get}"
       ss.sql(statement)
+      client.authorize(database.get)
     }
+    ss.sql(database.get)
+
     sparkSqlOperationManager.sessionToSparkSession.put(sessionHandle, ss)
     sparkSqlOperationManager.sessionToClient.put(sessionHandle, client)
     sessionHandle
@@ -132,5 +126,30 @@ private[hive] class SparkSQLSessionManager(hiveServer: HiveServer2, sparkSession
     sparkSqlOperationManager.sessionToActivePool.remove(sessionHandle)
     sparkSqlOperationManager.sessionToSparkSession.remove(sessionHandle)
     sparkSqlOperationManager.sessionToClient.remove(sessionHandle)
+  }
+
+  /**
+   * Extract ranger.user, spark.yarn.queue and database string from session configuration
+   * @param sessionConf session configuration
+   * @return updated (rangerUser, queue, database) by session configuration
+   */
+  private def configureSession(
+      sessionConf: JMap[String, String]): (Option[String], Option[String], Option[String]) = {
+    var rangerUser: Option[String] = None
+    var queue: Option[String] = Some(defaultQueue)
+    var database: Option[String] = Some("use default")
+    if (sessionConf != null) {
+      sessionConf.asScala.foreach { case ((key, value)) =>
+          if (key == "set:hivevar:ranger.user.name") {
+            rangerUser = Some(value)
+          } else if (key == "use:database") {
+            database = Some("use" + " " + value)
+          } else if (key == "set:hiveconf:mapred.job.queue.name") {
+            queue = Some(value)
+          }
+      }
+    }
+
+    (rangerUser, queue, database)
   }
 }

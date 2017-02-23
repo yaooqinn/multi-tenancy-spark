@@ -18,16 +18,19 @@
 package org.apache.spark.sql.hive.thriftserver
 
 import java.security.PrivilegedExceptionAction
-import java.util.concurrent.ConcurrentHashMap
+import java.util.concurrent.{ConcurrentHashMap, TimeUnit}
 
+import scala.collection.JavaConverters._
 import scala.util.control.{ControlThrowable, NonFatal}
 
-import org.apache.hive.service.cli.SessionHandle
+import org.apache.hive.service.cli.{HiveSQLException, SessionHandle}
 
 import org.apache.spark.{SparkConf, SparkContext}
 import org.apache.spark.deploy.SparkHadoopUtil
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.SparkSession
+import org.apache.spark.sql.hive.config._
+import org.apache.spark.util.ThreadUtils
 
 /**
  * The manager for hive's proxy-user-specified [[SparkSession]] s. If the proxy user is not the
@@ -43,14 +46,20 @@ private[thriftserver] class SparkSessionManager extends Logging {
   private val userToSparkSession: ConcurrentHashMap[String, SparkSession] = new ConcurrentHashMap
   
   // A map stores sessionHandle as key and proxy user as value. When a user opens a session as
-  // proxy user, we put a <sessionHandle, proxy-user> to it. When close, remove this kv pair.
+  // proxy-user, we put a <sessionHandle, proxy-user> to it. When close, remove this kv pair.
   private val hiveSessionToUser: ConcurrentHashMap[SessionHandle, String] = new ConcurrentHashMap
   
   private val sparkConf: SparkConf = SparkSQLEnv.originalConf.clone
   
   // Decide whether close user-specified spark environment, after there is no connections to it.
-  private val cleanSessionOnClose: Boolean =
-    sparkConf.getBoolean("spark.sql.cleanSessionOnClose", false)
+  private val cleanSessionOnClose: Boolean = sparkConf.get(CLEAN_SESSION_ON_CLOSE)
+  
+  // Interval for the sessionCleaner to stop unused sparkContext
+  private val sessionCleanInterval = sparkConf.get(SESSION_CLEAN_INTERVAL)
+  
+  if (!cleanSessionOnClose) {
+    new SparkSessionCleaner().scheduleCleanSession()
+  }
   
   /**
    * Check whether the user specified spark environment has been launched.
@@ -60,8 +69,8 @@ private[thriftserver] class SparkSessionManager extends Logging {
   private def isCtxStarted(user: String): Boolean = {
     assert(user != null, "proxy-user could not be null")
     
-    var ss = userToSparkSession.get(user)
-    if (ss != null && ss.sparkContext != null && !ss.sparkContext.stopped.get) {
+    val ss = userToSparkSession.get(user)
+    if (ss != null && ss.sparkContext != null && !ss.sparkContext.isStopped) {
       logInfo(s"SparkContext has been ready for proxy-user [$user], using this existing one to" +
         s"create new SparkSession.")
       true
@@ -72,8 +81,7 @@ private[thriftserver] class SparkSessionManager extends Logging {
     } else {
       logWarning(s"Current proxy-user [$user]'s SparkSession is binding to a dead SparkContext," +
         s"remove it and create a new one.")
-      userToSparkSession.remove(user) = null
-      ss = null
+      userToSparkSession.remove(user)
       false
     }
   }
@@ -89,13 +97,15 @@ private[thriftserver] class SparkSessionManager extends Logging {
   def getSessionOrCreate(
     sessionHandle: SessionHandle,
     user: String,
-    queue: String = "default"): SparkSession = {
+    queue: String): SparkSession = this.synchronized {
     assert(user != null, "proxy-user could not be null")
+    assert(queue != null, "the yarn queue must be specified")
     
     if (isCtxStarted(user)) {
+      this.notifyAll()
       val ss = userToSparkSession.get(user).newSession()
       hiveSessionToUser.put(sessionHandle, user)
-      ss
+      return ss
     } else {
       logInfo(s"Starting a new SparkContext in QUEUE: [$queue] for proxy-user [$user]")
       val conf = sparkConf.clone
@@ -115,26 +125,30 @@ private[thriftserver] class SparkSessionManager extends Logging {
             tryOrStopSparkContext(sparkContext) {
               val ss =
                 SparkSession.builder().enableHiveSupport().createWithContext(sparkContext)
-  
+          
               hiveSessionToUser.put(sessionHandle, user)
               userToSparkSession.put(user, ss)
             }
           }
         })
+        return userToSparkSession.get(user)
       } catch {
         case e: Exception =>
           // Hadoop's AuthorizationException suppresses the exception's stack trace, which
           // makes the message printed to the output by the JVM not very helpful. Instead,
           // detect exceptions with empty stack traces here, and treat them differently.
-          if (e.getStackTrace().length == 0) {
-            // scalastyle:off println
-            logWarning(s"ERROR: ${e.getClass().getName()}: ${e.getMessage()}")
+          val hiveSQLException =
+            new HiveSQLException("Failed to open new session cause by init sparkSession", e)
+          if (e.getStackTrace.length == 0) {
+            logWarning(s"ERROR: ${e.getClass.getName}: ${e.getMessage}")
+            throw hiveSQLException
           } else {
-            throw e
+            throw hiveSQLException
           }
       }
-      userToSparkSession.get(user)
     }
+    
+    null // never reached
   }
 
   /**
@@ -144,17 +158,17 @@ private[thriftserver] class SparkSessionManager extends Logging {
   def closeSession(sessionHandle: SessionHandle): Unit = {
     val user = hiveSessionToUser.remove(sessionHandle)
     
-    if (user eq null) {
+    if (user == null) {
       logWarning(s"Session $sessionHandle has been closed already and has a connected " +
         s"user no more.")
       return
     }
     
-    logInfo(s"Session ${sessionHandle} Closing, clear the connectivity with proxy-user [$user]")
+    logInfo(s"Session $sessionHandle Closing, clear the connectivity with proxy-user [$user]")
     
     if (cleanSessionOnClose && !hiveSessionToUser.containsValue(user)) {
       var ss = userToSparkSession.remove(user)
-      if (ss ne null && !ss.sparkContext.isStopped) {
+      if (ss != null && !ss.sparkContext.isStopped) {
         ss.stop()
       } else {
         ss = null
@@ -185,6 +199,61 @@ private[thriftserver] class SparkSessionManager extends Logging {
           logError(s"throw uncaught fatal error in thread $currentThreadName", t)
           throw t
         }
+    }
+  }
+  
+  /**
+   * Clean the sparkContext which is no hive session interacted with. This will periodically
+   * called by the [[SparkSessionCleaner]]
+   */
+  private def cleanUnusedSparkSession(): Unit = {
+    userToSparkSession.asScala.foreach { item =>
+      val user = item._1
+      val session = item._2
+      if (!hiveSessionToUser.containsValue(user)) {
+      
+        if (session != null && !session.sparkContext.isStopped) {
+          // try to stop the none used de sc if it is active
+          try {
+            session.stop()
+            userToSparkSession.remove(user)
+          } catch {
+            case e: Exception =>
+              logWarning(
+                s"""
+                   |SparkContext belong to proxy-user [$user] doesn't stop properly,
+                   |because ${e.getMessage} and will try again in $sessionCleanInterval
+                   |minutes later.
+                    """.stripMargin, e)
+          }
+        } else {
+          userToSparkSession.remove(user)
+        }
+      }
+    }
+  }
+  
+  /**
+   * A cleaner thread for stopping unused sparkContext
+   */
+  private class SparkSessionCleaner {
+  
+    private val sessionCleaner =
+      ThreadUtils.newDaemonSingleThreadScheduledExecutor("SparkSession Clean Thread")
+  
+  
+    private[hive] def scheduleCleanSession(): Unit = {
+    
+      // This thread periodically runs on the HiveThriftServer2 to clean unused SparkContext.
+      val sessionCleanerRunnable = new Runnable {
+        override def run(): Unit = {
+          // close sc never used and expired
+          cleanUnusedSparkSession()
+        }
+      }
+    
+      sessionCleaner.scheduleAtFixedRate(
+        sessionCleanerRunnable, sessionCleanInterval, sessionCleanInterval, TimeUnit.MINUTES)
     }
   }
 }
