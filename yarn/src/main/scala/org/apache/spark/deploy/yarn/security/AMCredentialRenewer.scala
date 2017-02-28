@@ -164,14 +164,15 @@ private[yarn] class AMCredentialRenewer(
     // have to worry about (like once every day or so). This makes this code clearer than having
     // to login and then relogin every time (the HDFS API may not relogin since we don't use this
     // UGI directly for HDFS communication.
+    val userMayProxy = UserGroupInformation.getCurrentUser.getShortUserName
     logInfo(s"Attempting to login to KDC using principal: $principal")
     val keytabLoggedInUGI = UserGroupInformation.loginUserFromKeytabAndReturnUGI(principal, keytab)
+    val proxyUser = UserGroupInformation.createProxyUser(userMayProxy, keytabLoggedInUGI)
     logInfo("Successfully logged into KDC.")
     val tempCreds = keytabLoggedInUGI.getCredentials
     val credentialsPath = new Path(credentialsFile)
-    val dst = credentialsPath.getParent
     var nearestNextRenewalTime = Long.MaxValue
-    keytabLoggedInUGI.doAs(new PrivilegedExceptionAction[Void] {
+    proxyUser.doAs(new PrivilegedExceptionAction[Void] {
       // Get a copy of the credentials
       override def run(): Void = {
         nearestNextRenewalTime = credentialManager.obtainCredentials(freshHadoopConf, tempCreds)

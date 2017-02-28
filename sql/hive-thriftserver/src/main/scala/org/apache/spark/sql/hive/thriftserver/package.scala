@@ -35,5 +35,12 @@ package object config {
       s"sparkSession cleaner to clean the unused sparkContexts, and use this value as interval")
     .timeConf(TimeUnit.MINUTES)
     .createWithDefault(300L)
-  
+
+  private[hive] val PROXY_USERS =
+    ConfigBuilder("spark.sql.proxy.users")
+      .doc(s"comma separated string for users for Spark Thrift Server to initializing " +
+        s"SparkContext.")
+      .stringConf
+      .toSequence
+      .createWithDefault(Nil)
 }

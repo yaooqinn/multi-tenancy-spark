@@ -17,27 +17,24 @@
 
 package org.apache.spark.sql.hive.thriftserver.server
 
-import java.util.{Map => JMap}
 import java.util.concurrent.ConcurrentHashMap
+import java.util.{Map => JMap}
 
 import org.apache.hive.service.cli._
-import org.apache.hive.service.cli.operation.{ExecuteStatementOperation, Operation, OperationManager}
+import org.apache.hive.service.cli.operation.{ExecuteStatementOperation, OperationManager}
 import org.apache.hive.service.cli.session.HiveSession
 
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.hive.HiveSessionState
 import org.apache.spark.sql.hive.client.HiveClient
-import org.apache.spark.sql.hive.thriftserver.{ReflectionUtils, SparkExecuteStatementOperation}
+import org.apache.spark.sql.hive.thriftserver.SparkExecuteStatementOperation
 
 /**
  * Executes queries using Spark SQL, and maintains a list of handles to active queries.
  */
 private[thriftserver] class SparkSQLOperationManager()
   extends OperationManager with Logging {
-
-  val handleToOperation = ReflectionUtils
-    .getSuperField[JMap[OperationHandle, Operation]](this, "handleToOperation")
 
   val sessionToActivePool = new ConcurrentHashMap[SessionHandle, String]
   val sessionToSparkSession = new ConcurrentHashMap[SessionHandle, SparkSession]

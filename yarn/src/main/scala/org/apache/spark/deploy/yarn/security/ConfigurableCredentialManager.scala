@@ -17,12 +17,14 @@
 
 package org.apache.spark.deploy.yarn.security
 
+import java.lang.reflect.UndeclaredThrowableException
+import java.security.PrivilegedExceptionAction
 import java.util.ServiceLoader
 
 import scala.collection.JavaConverters._
 
 import org.apache.hadoop.conf.Configuration
-import org.apache.hadoop.security.Credentials
+import org.apache.hadoop.security.{Credentials, UserGroupInformation}
 
 import org.apache.spark.SparkConf
 import org.apache.spark.deploy.SparkHadoopUtil
@@ -78,7 +80,7 @@ private[yarn] final class ConfigurableCredentialManager(
   def obtainCredentials(hadoopConf: Configuration, creds: Credentials): Long = {
     credentialProviders.values.flatMap { provider =>
       if (provider.credentialsRequired(hadoopConf)) {
-        provider.obtainCredentials(hadoopConf, sparkConf, creds)
+        doAsRealUser(provider.obtainCredentials(hadoopConf, sparkConf, creds))
       } else {
         logDebug(s"Service ${provider.serviceName} does not require a token." +
           s" Check your configuration to see if security is disabled or not.")
@@ -102,6 +104,25 @@ private[yarn] final class ConfigurableCredentialManager(
    */
   def credentialUpdater(): CredentialUpdater = {
     new CredentialUpdater(sparkConf, hadoopConf, this)
+  }
+
+  /**
+   * Run some code as the real logged in user (which may differ from the current user, for
+   * example, when using proxying).
+   */
+  private def doAsRealUser[T](fn: => T): T = {
+    val currentUser = UserGroupInformation.getCurrentUser()
+    val realUser = Option(currentUser.getRealUser()).getOrElse(currentUser)
+
+    // For some reason the Scala-generated anonymous class ends up causing an
+    // UndeclaredThrowableException, even if you annotate the method with @throws.
+    try {
+      realUser.doAs(new PrivilegedExceptionAction[T]() {
+        override def run(): T = fn
+      })
+    } catch {
+      case e: UndeclaredThrowableException => throw Option(e.getCause()).getOrElse(e)
+    }
   }
 }
 

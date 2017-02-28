@@ -17,48 +17,29 @@
 
 package org.apache.spark.sql.hive.thriftserver
 
-import java.io.IOException
 import java.util.{List => JList}
-import javax.security.auth.login.LoginException
 
 import scala.collection.JavaConverters._
 
 import org.apache.commons.logging.Log
 import org.apache.hadoop.hive.conf.HiveConf
-import org.apache.hadoop.hive.shims.Utils
-import org.apache.hadoop.security.UserGroupInformation
-import org.apache.hive.service.{AbstractService, Service, ServiceException}
+import org.apache.hive.service.{AbstractService, Service}
 import org.apache.hive.service.Service.STATE
-import org.apache.hive.service.auth.HiveAuthFactory
 import org.apache.hive.service.cli._
 import org.apache.hive.service.server.HiveServer2
 
-import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.hive.thriftserver.ReflectionUtils._
 
-private[hive] class SparkSQLCLIService(hiveServer: HiveServer2, sparkSession: SparkSession)
+private[hive] class SparkSQLCLIService(
+    hiveServer: HiveServer2)
   extends CLIService(hiveServer)
   with ReflectedCompositeService {
 
   override def init(hiveConf: HiveConf) {
-    setSuperField(this, "hiveConf", hiveConf)
-
-    val sparkSqlSessionManager = new SparkSQLSessionManager(hiveServer, sparkSession)
-    setSuperField(this, "sessionManager", sparkSqlSessionManager)
-    addService(sparkSqlSessionManager)
-    var sparkServiceUGI: UserGroupInformation = null
-
-    if (UserGroupInformation.isSecurityEnabled) {
-      try {
-        HiveAuthFactory.loginFromKeytab(hiveConf)
-        sparkServiceUGI = Utils.getUGI()
-        setSuperField(this, "serviceUGI", sparkServiceUGI)
-      } catch {
-        case e @ (_: IOException | _: LoginException) =>
-          throw new ServiceException("Unable to login to kerberos with given principal/keytab", e)
-      }
-    }
-
+    this.hiveConf = hiveConf
+    this.sessionManager = new SparkSQLSessionManager(hiveServer)
+    addService(sessionManager)
+    SparkSQLCLIService.this.serviceUGI = MultiSparkSQLEnv.globalUgi
     initCompositeService(hiveConf)
   }
 
@@ -66,7 +47,7 @@ private[hive] class SparkSQLCLIService(hiveServer: HiveServer2, sparkSession: Sp
     getInfoType match {
       case GetInfoType.CLI_SERVER_NAME => new GetInfoValue("Spark SQL")
       case GetInfoType.CLI_DBMS_NAME => new GetInfoValue("Spark SQL")
-      case GetInfoType.CLI_DBMS_VER => new GetInfoValue(sparkSession.sparkContext.version)
+      case GetInfoType.CLI_DBMS_VER => new GetInfoValue(MultiSparkSQLEnv.version)
       case _ => super.getInfo(sessionHandle, getInfoType)
     }
   }

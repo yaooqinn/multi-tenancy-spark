@@ -18,7 +18,7 @@
 package org.apache.spark.deploy.yarn
 
 import java.io.{File, FileOutputStream, IOException, OutputStreamWriter}
-import java.net.{InetAddress, UnknownHostException, URI}
+import java.net.{InetAddress, URI, UnknownHostException}
 import java.nio.ByteBuffer
 import java.nio.charset.StandardCharsets
 import java.util.{Properties, UUID}
@@ -36,6 +36,7 @@ import org.apache.hadoop.fs._
 import org.apache.hadoop.fs.permission.FsPermission
 import org.apache.hadoop.io.DataOutputBuffer
 import org.apache.hadoop.mapreduce.MRJobConfig
+import org.apache.hadoop.security.UserGroupInformation.AuthenticationMethod
 import org.apache.hadoop.security.{Credentials, UserGroupInformation}
 import org.apache.hadoop.util.StringUtils
 import org.apache.hadoop.yarn.api._
@@ -748,6 +749,8 @@ private[spark] class Client(
     confArchive
   }
 
+  private val currentUser = UserGroupInformation.getCurrentUser
+
   /**
    * Set up the environment for launching our ApplicationMaster container.
    */
@@ -764,7 +767,7 @@ private[spark] class Client(
         env("HADOOP_PROXY_USER") = user
         env("SPARK_USER") = user
       case _ =>
-        env("SPARK_USER") = UserGroupInformation.getCurrentUser().getShortUserName()
+        env("SPARK_USER") = currentUser.getShortUserName()
     }
     if (loginFromKeytab) {
       val credentialsFile = "credentials-" + UUID.randomUUID().toString
@@ -1044,13 +1047,8 @@ private[spark] class Client(
       sparkConf.set(PRINCIPAL.key, principal)
     }
     // Defensive copy of the credentials
-    val cred = user match {
-      case Some(u) if (UserGroupInformation.getCurrentUser.getShortUserName != u) =>
-        UserGroupInformation
-          .createProxyUser(u, UserGroupInformation.getCurrentUser)
-          .getCredentials
-      case _ => UserGroupInformation.getCurrentUser.getCredentials
-    }
+    val cred = currentUser.getCredentials
+
     credentials = new Credentials(cred)
   }
 

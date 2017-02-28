@@ -18,53 +18,32 @@
 package org.apache.spark.sql.hive.thriftserver
 
 import java.util.{Map => JMap}
-import java.util.concurrent.Executors
 
 import scala.collection.JavaConverters._
 
-import org.apache.commons.logging.Log
 import org.apache.hadoop.hive.conf.HiveConf
-import org.apache.hadoop.hive.conf.HiveConf.ConfVars
-import org.apache.hadoop.security.UserGroupInformation
-import org.apache.hive.service.cli.{HiveSQLException, SessionHandle}
+import org.apache.hive.service.cli.SessionHandle
 import org.apache.hive.service.cli.session.SessionManager
 import org.apache.hive.service.cli.thrift.TProtocolVersion
 import org.apache.hive.service.server.HiveServer2
 
+import org.apache.spark.SparkException
 import org.apache.spark.sql.SparkSession
-import org.apache.spark.sql.hive.{HiveSessionState, HiveUtils}
-import org.apache.spark.sql.hive.thriftserver.ReflectionUtils._
+import org.apache.spark.sql.hive.HiveUtils
 import org.apache.spark.sql.hive.thriftserver.server.SparkSQLOperationManager
 
-private[hive] class SparkSQLSessionManager(hiveServer: HiveServer2, sparkSession: SparkSession)
+private[hive] class SparkSQLSessionManager(hiveServer: HiveServer2)
   extends SessionManager(hiveServer)
   with ReflectedCompositeService {
 
-  private lazy val sparkSqlOperationManager = new SparkSQLOperationManager()
+  private val defaultQueue = MultiSparkSQLEnv.originConf.get("spark.yarn.queue", "default")
 
-  private lazy val contextMgr = new SparkSessionManager
-
-  private val defaultUser = UserGroupInformation.getCurrentUser.getShortUserName
-
-  private val defaultQueue = SparkSQLEnv.originalConf.get("spark.yarn.queue", "default")
+  private val sqlOperationManager = new SparkSQLOperationManager()
 
   override def init(hiveConf: HiveConf) {
-    setSuperField(this, "hiveConf", hiveConf)
-
-    // Create operation log root directory, if operation logging is enabled
-    if (hiveConf.getBoolVar(ConfVars.HIVE_SERVER2_LOGGING_OPERATION_ENABLED)) {
-      invoke(classOf[SessionManager], this, "initOperationLogRootDir")
-    }
-
-    val backgroundPoolSize = hiveConf.getIntVar(ConfVars.HIVE_SERVER2_ASYNC_EXEC_THREADS)
-    setSuperField(this, "backgroundOperationPool", Executors.newFixedThreadPool(backgroundPoolSize))
-    getAncestorField[Log](this, 3, "LOG").info(
-      s"HiveServer2: Async execution pool size $backgroundPoolSize")
-
-    setSuperField(this, "operationManager", sparkSqlOperationManager)
-    addService(sparkSqlOperationManager)
-
-    initCompositeService(hiveConf)
+    this.operationManager = sqlOperationManager
+    addService(operationManager)
+    super.init(hiveConf)
   }
 
   override def openSession(
@@ -81,23 +60,10 @@ private[hive] class SparkSQLSessionManager(hiveServer: HiveServer2, sparkSession
     val session = super.getSession(sessionHandle)
     HiveThriftServer2.listener.onSessionCreated(
       session.getIpAddress, sessionHandle.getSessionId.toString, session.getUsername)
-    val sessionState = sparkSession.sessionState.asInstanceOf[HiveSessionState]
 
-    val (rangerUser, queue, database) = configureSession(sessionConf)
+    val (rangerUser, _, database) = configureSession(sessionConf)
 
-    val ss = if (sessionState.hiveThriftServerSingleSession) {
-      sparkSession
-    } else if (!withImpersonation || username == null) {
-      sparkSession.newSession()
-    } else {
-      try {
-        contextMgr.getSessionOrCreate(sessionHandle, username, queue.get)
-      } catch {
-        case e: Exception =>
-          throw new HiveSQLException("Failed to open new session caused by init sparkSession", e)
-      }
-    }
-
+    val ss = getUserSession(username)
     val metastoreUser = rangerUser.getOrElse(username)
 
     val client = HiveUtils.newClientForMetadata(
@@ -114,18 +80,17 @@ private[hive] class SparkSQLSessionManager(hiveServer: HiveServer2, sparkSession
     }
     ss.sql(database.get)
 
-    sparkSqlOperationManager.sessionToSparkSession.put(sessionHandle, ss)
-    sparkSqlOperationManager.sessionToClient.put(sessionHandle, client)
+    sqlOperationManager.sessionToSparkSession.put(sessionHandle, ss)
+    sqlOperationManager.sessionToClient.put(sessionHandle, client)
     sessionHandle
   }
 
   override def closeSession(sessionHandle: SessionHandle) {
     HiveThriftServer2.listener.onSessionClosed(sessionHandle.getSessionId.toString)
-    contextMgr.closeSession(sessionHandle)
     super.closeSession(sessionHandle)
-    sparkSqlOperationManager.sessionToActivePool.remove(sessionHandle)
-    sparkSqlOperationManager.sessionToSparkSession.remove(sessionHandle)
-    sparkSqlOperationManager.sessionToClient.remove(sessionHandle)
+    sqlOperationManager.sessionToActivePool.remove(sessionHandle)
+    sqlOperationManager.sessionToSparkSession.remove(sessionHandle)
+    sqlOperationManager.sessionToClient.remove(sessionHandle)
   }
 
   /**
@@ -152,4 +117,24 @@ private[hive] class SparkSQLSessionManager(hiveServer: HiveServer2, sparkSession
 
     (rangerUser, queue, database)
   }
+
+  private def getUserSession(user: String): SparkSession = {
+    if (!MultiSparkSQLEnv.userToQueue.containsKey(user)) {
+      throw new SparkException(s"Connecting Spark Thrift Server with User [$user] is forbidden," +
+        s"no resource is prepared for it. Please change to an available user or add [$user] to " +
+        s"the `spark.yarn.proxy.users` on the server side." )
+    }
+    if (!MultiSparkSQLEnv.userToSession.containsKey(user)) {
+      throw new SparkException(s"SparkContext for User [$user] is not initialized please restart" +
+        s" the server.")
+    } else {
+      MultiSparkSQLEnv.userToSession.get(user) match {
+        case ss: SparkSession if (!ss.sparkContext.isStopped) =>
+          ss.newSession()
+        case _ =>
+          throw new SparkException(s"SparkContext stopped for User [$user]")
+      }
+    }
+  }
+
 }

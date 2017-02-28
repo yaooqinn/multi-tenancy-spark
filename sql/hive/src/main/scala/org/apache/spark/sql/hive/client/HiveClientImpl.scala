@@ -35,6 +35,7 @@ import org.apache.hadoop.hive.ql.parse.{ParseDriver, ParseUtils, SemanticAnalyze
 import org.apache.hadoop.hive.ql.processors._
 import org.apache.hadoop.hive.ql.session.SessionState
 import org.apache.hadoop.security.UserGroupInformation
+import org.apache.hadoop.security.UserGroupInformation.AuthenticationMethod
 
 import org.apache.spark.deploy.SparkHadoopUtil
 import org.apache.spark.{SparkConf, SparkException}
@@ -114,7 +115,9 @@ private[hive] class HiveClientImpl(
     // and spark.yarn.principal set in SparkSubmit, as yarn.Client resets the
     // keytab configuration for the link name in distributed cache
     val sconf = new SparkConf(true)
-    if (sconf.contains("spark.yarn.principal")
+    val proxy =
+      UserGroupInformation.getCurrentUser.getAuthenticationMethod == AuthenticationMethod.PROXY
+    if (!proxy && sconf.contains("spark.yarn.principal")
             && sconf.contains("spark.yarn.keytab")) {
       val principalName = sconf.get("spark.yarn.principal")
       val keytabFileName = sconf.get("spark.yarn.keytab")

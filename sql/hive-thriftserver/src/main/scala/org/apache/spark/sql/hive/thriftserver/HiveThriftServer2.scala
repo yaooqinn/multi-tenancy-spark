@@ -22,6 +22,7 @@ import java.util.concurrent.atomic.AtomicBoolean
 
 import scala.collection.mutable
 import scala.collection.mutable.ArrayBuffer
+import scala.collection.JavaConverters._
 
 import org.apache.commons.logging.LogFactory
 import org.apache.hadoop.hive.conf.HiveConf
@@ -29,13 +30,11 @@ import org.apache.hadoop.hive.conf.HiveConf.ConfVars
 import org.apache.hive.service.cli.thrift.{ThriftBinaryCLIService, ThriftHttpCLIService}
 import org.apache.hive.service.server.HiveServer2
 
-import org.apache.spark.SparkContext
-import org.apache.spark.annotation.DeveloperApi
+import org.apache.spark.{SparkConf, SparkContext}
+import org.apache.spark.deploy.SparkHadoopUtil
 import org.apache.spark.internal.Logging
 import org.apache.spark.scheduler.{SparkListener, SparkListenerApplicationEnd, SparkListenerJobStart}
-import org.apache.spark.sql.{RuntimeConfig, SparkSession}
 import org.apache.spark.sql.hive.HiveUtils
-import org.apache.spark.sql.hive.thriftserver.ReflectionUtils._
 import org.apache.spark.sql.hive.thriftserver.ui.ThriftServerTab
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.util.{ShutdownHookManager, Utils}
@@ -46,31 +45,8 @@ import org.apache.spark.util.{ShutdownHookManager, Utils}
  */
 object HiveThriftServer2 extends Logging {
   var LOG = LogFactory.getLog(classOf[HiveServer2])
-  var uiTab: Option[ThriftServerTab] = _
+  var uiTabs: List[ThriftServerTab] = _
   var listener: HiveThriftServer2Listener = _
-
-  /**
-   * :: DeveloperApi ::
-   * Starts a new thrift server with the given context.
-   */
-  @DeveloperApi
-  def startWithContext(sparkSession: SparkSession): Unit = {
-    val server = new HiveThriftServer2(sparkSession)
-
-    val executionHive = HiveUtils.newClientForExecution(
-      sparkSession.sparkContext.conf,
-      sparkSession.sessionState.newHadoopConf())
-
-    server.init(executionHive.conf)
-    server.start()
-    listener = new HiveThriftServer2Listener(server, sparkSession.conf)
-    sparkSession.sparkContext.addSparkListener(listener)
-    uiTab = if (sparkSession.sparkContext.getConf.getBoolean("spark.ui.enabled", true)) {
-      Some(new ThriftServerTab(sparkSession.sparkContext))
-    } else {
-      None
-    }
-  }
 
   def main(args: Array[String]) {
     Utils.initDaemon(log)
@@ -78,33 +54,33 @@ object HiveThriftServer2 extends Logging {
     optionsProcessor.parse(args)
 
     logInfo("Starting SparkContext")
-    SparkSQLEnv.init()
+    MultiSparkSQLEnv.init()
 
     ShutdownHookManager.addShutdownHook { () =>
-      SparkSQLEnv.stop()
-      uiTab.foreach(_.detach())
+      MultiSparkSQLEnv.stop()
+      uiTabs.foreach(_.detach())
     }
 
     val executionHive = HiveUtils.newClientForExecution(
-      SparkSQLEnv.sparkSession.sparkContext.conf,
-      SparkSQLEnv.sparkSession.sessionState.newHadoopConf())
+      MultiSparkSQLEnv.originConf,
+      SparkHadoopUtil.get.newConfiguration(MultiSparkSQLEnv.originConf))
 
     try {
-      val server = new HiveThriftServer2(SparkSQLEnv.sparkSession)
+      val server = new HiveThriftServer2
       server.init(executionHive.conf)
       server.start()
       logInfo("HiveThriftServer2 started")
-      listener = new HiveThriftServer2Listener(server, SparkSQLEnv.sparkSession.conf)
-      SparkSQLEnv.sparkSession.sparkContext.addSparkListener(listener)
-      uiTab =
-        if (SparkSQLEnv.sparkSession.sparkContext.getConf.getBoolean("spark.ui.enabled", true)) {
-        Some(new ThriftServerTab(SparkSQLEnv.sparkSession.sparkContext))
-      } else {
-        None
+      listener = new HiveThriftServer2Listener(server, MultiSparkSQLEnv.originConf)
+      MultiSparkSQLEnv.userToSession.values().asScala.foreach { ss =>
+        ss.sparkContext.addSparkListener(listener)
+        val uiTab = new ThriftServerTab(ss.sparkContext)
+        uiTabs = uiTab :: uiTabs
       }
+
       // If application was killed before HiveThriftServer2 start successfully then SparkSubmit
       // process can not exit, so check whether if SparkContext was stopped.
-      if (SparkSQLEnv.sparkSession.sparkContext.stopped.get()) {
+      if (!MultiSparkSQLEnv.userToSession.asScala.forall { case ((_, ss)) =>
+        !ss.sparkContext.isStopped}) {
         logError("SparkContext has stopped even if HiveServer2 has started, so exit")
         System.exit(-1)
       }
@@ -162,10 +138,14 @@ object HiveThriftServer2 extends Logging {
    */
   private[thriftserver] class HiveThriftServer2Listener(
       val server: HiveServer2,
-      val conf: RuntimeConfig) extends SparkListener {
+      val conf: SparkConf) extends SparkListener {
 
     override def onApplicationEnd(applicationEnd: SparkListenerApplicationEnd): Unit = {
-      server.stop()
+      if (MultiSparkSQLEnv.userToSession.asScala.forall {
+        case ((_, ss)) => ss.sparkContext.isStopped
+      }) {
+        server.stop()
+      }
     }
     private var onlineSessionNum: Int = 0
     private val sessionList = new mutable.LinkedHashMap[String, SessionInfo]
@@ -270,26 +250,21 @@ object HiveThriftServer2 extends Logging {
   }
 }
 
-private[hive] class HiveThriftServer2(sparkSession: SparkSession)
-  extends HiveServer2
+private[hive] class HiveThriftServer2 extends HiveServer2
   with ReflectedCompositeService {
   // state is tracked internally so that the server only attempts to shut down if it successfully
   // started, and then once only.
   private val started = new AtomicBoolean(false)
 
   override def init(hiveConf: HiveConf) {
-    val sparkSqlCliService = new SparkSQLCLIService(this, sparkSession)
-    setSuperField(this, "cliService", sparkSqlCliService)
-    addService(sparkSqlCliService)
-
-    val thriftCliService = if (isHTTPTransportMode(hiveConf)) {
-      new ThriftHttpCLIService(sparkSqlCliService)
+    this.cliService = new SparkSQLCLIService(this)
+    addService(cliService)
+    this.thriftCLIService = if (isHTTPTransportMode(hiveConf)) {
+      new ThriftHttpCLIService(cliService)
     } else {
-      new ThriftBinaryCLIService(sparkSqlCliService)
+      new ThriftBinaryCLIService(cliService)
     }
-
-    setSuperField(this, "thriftCLIService", thriftCliService)
-    addService(thriftCliService)
+    addService(thriftCLIService)
     initCompositeService(hiveConf)
   }
 

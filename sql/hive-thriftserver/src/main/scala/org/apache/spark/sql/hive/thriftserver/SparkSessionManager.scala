@@ -97,7 +97,7 @@ private[thriftserver] class SparkSessionManager extends Logging {
   def getSessionOrCreate(
     sessionHandle: SessionHandle,
     user: String,
-    queue: String): SparkSession = this.synchronized {
+    queue: String): SparkSession = synchronized {
     assert(user != null, "proxy-user could not be null")
     assert(queue != null, "the yarn queue must be specified")
     

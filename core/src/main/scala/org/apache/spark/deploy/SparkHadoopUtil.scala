@@ -83,6 +83,20 @@ class SparkHadoopUtil extends Logging {
     proxyUser
   }
 
+  /**
+   * Create a proxy user using username of the effective user and the ugi of the
+   * real user.
+   * @param user
+   * @param realUser
+   * @return
+   */
+  def createProxyUser(user: String, realUser: UserGroupInformation): UserGroupInformation = {
+    val proxyUser = UserGroupInformation.createProxyUser(user, realUser)
+    log.info("Current proxy-user is " + proxyUser.getUserName)
+    transferCredentials(realUser, proxyUser)
+    proxyUser
+  }
+
   def transferCredentials(source: UserGroupInformation, dest: UserGroupInformation) {
     for (token <- source.getTokens.asScala) {
       dest.addToken(token)
