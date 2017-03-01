@@ -62,8 +62,21 @@ class SparkHadoopUtil extends Logging {
     val user = Utils.getCurrentUserName()
     logDebug("running as user: " + user)
     val ugi = UserGroupInformation.createRemoteUser(user)
-    transferCredentials(UserGroupInformation.getCurrentUser(), ugi)
+//    transferCredentials(UserGroupInformation.getCurrentUser(), ugi)
     ugi.doAs(new PrivilegedExceptionAction[Unit] {
+      def run: Unit = func()
+    })
+  }
+
+  def runAsProxyUser(user: String)(func: () => Unit): Unit = {
+    require(sparkConf.contains("spark.yarn.keytab") && sparkConf.contains("spark.yarn.principal"),
+      "spark.yarn.keytab && spark.yarn.principal shouldn't be null")
+    val keytab = sparkConf.get("spark.yarn.keytab")
+    val principal = sparkConf.get("spark.yarn.principal")
+    val realUser = UserGroupInformation.loginUserFromKeytabAndReturnUGI(principal, keytab)
+    val proxyUser = createProxyUser(user, realUser)
+    transferCredentials(realUser, proxyUser)
+    proxyUser.doAs(new PrivilegedExceptionAction[Unit] {
       def run: Unit = func()
     })
   }
@@ -93,7 +106,6 @@ class SparkHadoopUtil extends Logging {
   def createProxyUser(user: String, realUser: UserGroupInformation): UserGroupInformation = {
     val proxyUser = UserGroupInformation.createProxyUser(user, realUser)
     log.info("Current proxy-user is " + proxyUser.getUserName)
-    transferCredentials(realUser, proxyUser)
     proxyUser
   }
 

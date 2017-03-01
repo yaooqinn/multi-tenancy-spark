@@ -19,8 +19,6 @@ package org.apache.spark.deploy.yarn
 
 import scala.collection.mutable.ArrayBuffer
 
-import org.apache.spark.util.{IntParam, MemoryParam}
-
 class ApplicationMasterArguments(val args: Array[String]) {
   var userJar: String = null
   var userClass: String = null
@@ -28,6 +26,7 @@ class ApplicationMasterArguments(val args: Array[String]) {
   var primaryRFile: String = null
   var userArgs: Seq[String] = Nil
   var propertiesFile: String = null
+  var proxyUser: String = null
 
   parseArgs(args.toList)
 
@@ -62,6 +61,10 @@ class ApplicationMasterArguments(val args: Array[String]) {
 
         case ("--properties-file") :: value :: tail =>
           propertiesFile = value
+          args = tail
+
+        case ("--proxy-user") :: value :: tail =>
+          proxyUser = value
           args = tail
 
         case _ =>

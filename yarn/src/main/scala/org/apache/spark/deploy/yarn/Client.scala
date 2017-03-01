@@ -21,13 +21,13 @@ import java.io.{File, FileOutputStream, IOException, OutputStreamWriter}
 import java.net.{InetAddress, URI, UnknownHostException}
 import java.nio.ByteBuffer
 import java.nio.charset.StandardCharsets
-import java.util.{Properties, UUID}
 import java.util.zip.{ZipEntry, ZipOutputStream}
+import java.util.{Properties, UUID}
 
 import scala.collection.JavaConverters._
 import scala.collection.mutable.{ArrayBuffer, HashMap, HashSet, ListBuffer, Map}
-import scala.util.{Failure, Success, Try}
 import scala.util.control.NonFatal
+import scala.util.{Failure, Success, Try}
 
 import com.google.common.base.Objects
 import com.google.common.io.Files
@@ -39,8 +39,8 @@ import org.apache.hadoop.mapreduce.MRJobConfig
 import org.apache.hadoop.security.UserGroupInformation.AuthenticationMethod
 import org.apache.hadoop.security.{Credentials, UserGroupInformation}
 import org.apache.hadoop.util.StringUtils
-import org.apache.hadoop.yarn.api._
 import org.apache.hadoop.yarn.api.ApplicationConstants.Environment
+import org.apache.hadoop.yarn.api._
 import org.apache.hadoop.yarn.api.protocolrecords._
 import org.apache.hadoop.yarn.api.records._
 import org.apache.hadoop.yarn.client.api.{YarnClient, YarnClientApplication}
@@ -48,7 +48,6 @@ import org.apache.hadoop.yarn.conf.YarnConfiguration
 import org.apache.hadoop.yarn.exceptions.ApplicationNotFoundException
 import org.apache.hadoop.yarn.util.Records
 
-import org.apache.spark.{SecurityManager, SparkConf, SparkException}
 import org.apache.spark.deploy.SparkHadoopUtil
 import org.apache.spark.deploy.yarn.config._
 import org.apache.spark.deploy.yarn.security.ConfigurableCredentialManager
@@ -56,6 +55,7 @@ import org.apache.spark.internal.Logging
 import org.apache.spark.internal.config._
 import org.apache.spark.launcher.{LauncherBackend, SparkAppHandle, YarnCommandBuilderUtils}
 import org.apache.spark.util.{CallerContext, Utils}
+import org.apache.spark.{SecurityManager, SparkConf, SparkException}
 
 private[spark] class Client(
     val args: ClientArguments,
@@ -962,6 +962,13 @@ private[spark] class Client(
       } else {
         Nil
       }
+    val proxyUser =
+      if (UserGroupInformation.getCurrentUser.getAuthenticationMethod ==
+        AuthenticationMethod.PROXY) {
+        Seq("--proxy-user", currentUser.getShortUserName)
+      } else {
+        Nil
+      }
     val userJar =
       if (args.userJar != null) {
         Seq("--jar", args.userJar)
@@ -993,7 +1000,7 @@ private[spark] class Client(
       Seq("--arg", YarnSparkHadoopUtil.escapeForShell(arg))
     }
     val amArgs =
-      Seq(amClass) ++ userClass ++ userJar ++ primaryPyFile ++ primaryRFile ++
+      Seq(amClass) ++ userClass ++ userJar ++ primaryPyFile ++ primaryRFile ++ proxyUser ++
         userArgs ++ Seq(
           "--properties-file", buildPath(YarnSparkHadoopUtil.expandEnvironment(Environment.PWD),
             LOCALIZED_CONF_DIR, SPARK_CONF_FILE))

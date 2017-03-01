@@ -45,7 +45,7 @@ private[hive] object MultiSparkSQLEnv extends Logging{
   val userToSession = new util.HashMap[String, SparkSession]()
   val userToQueue = new util.HashMap[String, String]()
 
-  var globalUgi: UserGroupInformation = _
+  val globalUgi: UserGroupInformation = UserGroupInformation.getCurrentUser
 
   def init(): Unit = {
     originConf.set("spark.driver.allowMultipleContexts", "true")
@@ -59,15 +59,12 @@ private[hive] object MultiSparkSQLEnv extends Logging{
 
     verifyProxyConfigs(originConf)
 
-    globalUgi = loginUserFromKeytab(originConf)
-
     users.foreach { user =>
       val proxyUser = SparkHadoopUtil.get.createProxyUser(user, globalUgi)
 
       val userConf = originConf.clone
       userConf.set("spark.yarn.queue", userToQueue.get(user))
       userConf.set("spark.app.name", userConf.get("spark.app.name") + " to " + user)
-      userConf.set("spark.driver.allowMultipleContexts", "true")
 
       try {
         proxyUser.doAs(new PrivilegedExceptionAction[Unit]() {
@@ -79,7 +76,6 @@ private[hive] object MultiSparkSQLEnv extends Logging{
                   .builder()
                   .enableHiveSupport()
                   .createWithContext(sparkContext)
-              val sessionState = ss.sessionState.asInstanceOf[HiveSessionState]
               ss.conf.set("spark.sql.hive.version", HiveUtils.hiveExecutionVersion)
               userToSession.put(user, ss)
             }
@@ -173,7 +169,7 @@ private[hive] object MultiSparkSQLEnv extends Logging{
     logInfo(s"Getting queue for users: ${users.toString}")
     val defaultQueue = conf.get("spark.yarn.queue", "default")
     users.foreach { user =>
-      val qKey = s"spark.yarn.queue.$user"
+      val qKey = s"spark.sql.queue.$user"
       val queue = conf.get(qKey, defaultQueue)
 
       if (queue == defaultQueue) {
