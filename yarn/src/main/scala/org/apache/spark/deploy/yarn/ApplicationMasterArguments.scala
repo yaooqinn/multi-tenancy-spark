@@ -26,7 +26,6 @@ class ApplicationMasterArguments(val args: Array[String]) {
   var primaryRFile: String = null
   var userArgs: Seq[String] = Nil
   var propertiesFile: String = null
-  var proxyUser: String = null
 
   parseArgs(args.toList)
 
@@ -61,10 +60,6 @@ class ApplicationMasterArguments(val args: Array[String]) {
 
         case ("--properties-file") :: value :: tail =>
           propertiesFile = value
-          args = tail
-
-        case ("--proxy-user") :: value :: tail =>
-          proxyUser = value
           args = tail
 
         case _ =>

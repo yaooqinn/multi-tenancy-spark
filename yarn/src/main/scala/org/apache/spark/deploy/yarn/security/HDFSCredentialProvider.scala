@@ -18,6 +18,8 @@
 package org.apache.spark.deploy.yarn.security
 
 import java.io.{ByteArrayInputStream, DataInputStream}
+import java.lang.reflect.UndeclaredThrowableException
+import java.security.PrivilegedExceptionAction
 
 import scala.collection.JavaConverters._
 
@@ -25,7 +27,7 @@ import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.{FileSystem, Path}
 import org.apache.hadoop.hdfs.security.token.delegation.DelegationTokenIdentifier
 import org.apache.hadoop.mapred.Master
-import org.apache.hadoop.security.Credentials
+import org.apache.hadoop.security.{Credentials, UserGroupInformation}
 
 import org.apache.spark.{SparkConf, SparkException}
 import org.apache.spark.deploy.yarn.config._
@@ -81,13 +83,32 @@ private[security] class HDFSCredentialProvider extends ServiceCredentialProvider
       val hdfsToken = creds.getAllTokens.asScala
         .find(_.getKind == DelegationTokenIdentifier.HDFS_DELEGATION_KIND)
       hdfsToken.map { t =>
-        val newExpiration = t.renew(hadoopConf)
+        val newExpiration: Long = doAsRealUser(t.renew(hadoopConf))
         val identifier = new DelegationTokenIdentifier()
         identifier.readFields(new DataInputStream(new ByteArrayInputStream(t.getIdentifier)))
         val interval = newExpiration - identifier.getIssueDate
         logInfo(s"Renewal Interval is $interval")
         interval
       }
+    }
+  }
+
+  /**
+   * Run some code as the real logged in user (which may differ from the current user, for
+   * example, when using proxying).
+   */
+  private def doAsRealUser[T](fn: => T): T = {
+    val currentUser = UserGroupInformation.getCurrentUser()
+    val realUser = Option(currentUser.getRealUser()).getOrElse(currentUser)
+
+    // For some reason the Scala-generated anonymous class ends up causing an
+    // UndeclaredThrowableException, even if you annotate the method with @throws.
+    try {
+      realUser.doAs(new PrivilegedExceptionAction[T]() {
+        override def run(): T = fn
+      })
+    } catch {
+      case e: UndeclaredThrowableException => throw Option(e.getCause()).getOrElse(e)
     }
   }
 

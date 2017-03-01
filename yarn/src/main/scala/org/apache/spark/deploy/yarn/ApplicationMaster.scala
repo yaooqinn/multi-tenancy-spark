@@ -247,7 +247,7 @@ private[spark] class ApplicationMaster(
         // periodically
         credentialRenewer =
           ConfigurableCredentialManager(sparkConf).credentialRenewer()
-//        credentialRenewer.scheduleLoginFromKeytab()
+        credentialRenewer.scheduleLoginFromKeytab()
       }
 
       if (isClusterMode) {

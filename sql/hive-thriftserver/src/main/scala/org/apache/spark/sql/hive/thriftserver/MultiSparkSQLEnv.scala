@@ -27,12 +27,12 @@ import scala.util.control.{ControlThrowable, NonFatal}
 
 import org.apache.hadoop.security.UserGroupInformation
 
+import org.apache.spark.{SPARK_VERSION, SparkConf, SparkContext, SparkException}
 import org.apache.spark.deploy.SparkHadoopUtil
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.SparkSession
+import org.apache.spark.sql.hive.HiveUtils
 import org.apache.spark.sql.hive.config._
-import org.apache.spark.sql.hive.{HiveSessionState, HiveUtils}
-import org.apache.spark.{SPARK_VERSION, SparkConf, SparkContext, SparkException}
 
 private[hive] object MultiSparkSQLEnv extends Logging{
 
@@ -50,16 +50,15 @@ private[hive] object MultiSparkSQLEnv extends Logging{
   def init(): Unit = {
     originConf.set("spark.driver.allowMultipleContexts", "true")
 
-    val users = originConf.get(PROXY_USERS).distinct
+    val users = originConf.get(PROXY_USERS).distinct.filter(_ != globalUgi.getShortUserName)
 
-    assert(users.nonEmpty, s"No user is configured in ${PROXY_USERS.key}, please specify the " +
-      s"users who can impersonate the realUser")
+    require(users.nonEmpty, s"No user is configured in ${PROXY_USERS.key}, please specify the " +
+      s"users who can impersonate the Real User [${globalUgi.getUserName}]")
 
     initQueue(users, originConf)
 
-    verifyProxyConfigs(originConf)
-
     users.foreach { user =>
+      logInfo(s"Starting SparkContext for $user")
       val proxyUser = SparkHadoopUtil.get.createProxyUser(user, globalUgi)
 
       val userConf = originConf.clone
@@ -97,7 +96,6 @@ private[hive] object MultiSparkSQLEnv extends Logging{
       }
     }
   }
-
 
   /** Cleans up and shuts down all the Spark SQL environments. */
   def stop() {

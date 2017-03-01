@@ -39,7 +39,7 @@ private[hive] class SparkSQLCLIService(
     this.hiveConf = hiveConf
     this.sessionManager = new SparkSQLSessionManager(hiveServer)
     addService(sessionManager)
-    SparkSQLCLIService.this.serviceUGI = MultiSparkSQLEnv.globalUgi
+    this.serviceUGI = MultiSparkSQLEnv.globalUgi
     initCompositeService(hiveConf)
   }
 

@@ -962,13 +962,6 @@ private[spark] class Client(
       } else {
         Nil
       }
-    val proxyUser =
-      if (UserGroupInformation.getCurrentUser.getAuthenticationMethod ==
-        AuthenticationMethod.PROXY) {
-        Seq("--proxy-user", currentUser.getShortUserName)
-      } else {
-        Nil
-      }
     val userJar =
       if (args.userJar != null) {
         Seq("--jar", args.userJar)
@@ -1000,7 +993,7 @@ private[spark] class Client(
       Seq("--arg", YarnSparkHadoopUtil.escapeForShell(arg))
     }
     val amArgs =
-      Seq(amClass) ++ userClass ++ userJar ++ primaryPyFile ++ primaryRFile ++ proxyUser ++
+      Seq(amClass) ++ userClass ++ userJar ++ primaryPyFile ++ primaryRFile ++
         userArgs ++ Seq(
           "--properties-file", buildPath(YarnSparkHadoopUtil.expandEnvironment(Environment.PWD),
             LOCALIZED_CONF_DIR, SPARK_CONF_FILE))

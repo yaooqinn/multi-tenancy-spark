@@ -18,10 +18,13 @@
 package org.apache.spark.sql.hive.thriftserver
 
 import java.util.{Map => JMap}
+import java.util.concurrent.Executors
 
 import scala.collection.JavaConverters._
 
+import org.apache.commons.logging.Log
 import org.apache.hadoop.hive.conf.HiveConf
+import org.apache.hadoop.hive.conf.HiveConf.ConfVars
 import org.apache.hive.service.cli.SessionHandle
 import org.apache.hive.service.cli.session.SessionManager
 import org.apache.hive.service.cli.thrift.TProtocolVersion
@@ -30,6 +33,7 @@ import org.apache.hive.service.server.HiveServer2
 import org.apache.spark.SparkException
 import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.hive.HiveUtils
+import org.apache.spark.sql.hive.thriftserver.ReflectionUtils.{getAncestorField, invoke, setSuperField}
 import org.apache.spark.sql.hive.thriftserver.server.SparkSQLOperationManager
 
 private[hive] class SparkSQLSessionManager(hiveServer: HiveServer2)
@@ -38,12 +42,25 @@ private[hive] class SparkSQLSessionManager(hiveServer: HiveServer2)
 
   private val defaultQueue = MultiSparkSQLEnv.originConf.get("spark.yarn.queue", "default")
 
-  private val sqlOperationManager = new SparkSQLOperationManager()
+  private lazy val sparkSqlOperationManager = new SparkSQLOperationManager()
 
   override def init(hiveConf: HiveConf) {
-    this.operationManager = sqlOperationManager
-    addService(operationManager)
-    super.init(hiveConf)
+    setSuperField(this, "hiveConf", hiveConf)
+
+    // Create operation log root directory, if operation logging is enabled
+    if (hiveConf.getBoolVar(ConfVars.HIVE_SERVER2_LOGGING_OPERATION_ENABLED)) {
+      invoke(classOf[SessionManager], this, "initOperationLogRootDir")
+    }
+
+    val backgroundPoolSize = hiveConf.getIntVar(ConfVars.HIVE_SERVER2_ASYNC_EXEC_THREADS)
+    setSuperField(this, "backgroundOperationPool", Executors.newFixedThreadPool(backgroundPoolSize))
+    getAncestorField[Log](this, 3, "LOG").info(
+      s"HiveServer2: Async execution pool size $backgroundPoolSize")
+
+    setSuperField(this, "operationManager", sparkSqlOperationManager)
+    addService(sparkSqlOperationManager)
+
+    initCompositeService(hiveConf)
   }
 
   override def openSession(
@@ -80,17 +97,17 @@ private[hive] class SparkSQLSessionManager(hiveServer: HiveServer2)
     }
     ss.sql(database.get)
 
-    sqlOperationManager.sessionToSparkSession.put(sessionHandle, ss)
-    sqlOperationManager.sessionToClient.put(sessionHandle, client)
+    sparkSqlOperationManager.sessionToSparkSession.put(sessionHandle, ss)
+    sparkSqlOperationManager.sessionToClient.put(sessionHandle, client)
     sessionHandle
   }
 
   override def closeSession(sessionHandle: SessionHandle) {
     HiveThriftServer2.listener.onSessionClosed(sessionHandle.getSessionId.toString)
     super.closeSession(sessionHandle)
-    sqlOperationManager.sessionToActivePool.remove(sessionHandle)
-    sqlOperationManager.sessionToSparkSession.remove(sessionHandle)
-    sqlOperationManager.sessionToClient.remove(sessionHandle)
+    sparkSqlOperationManager.sessionToActivePool.remove(sessionHandle)
+    sparkSqlOperationManager.sessionToSparkSession.remove(sessionHandle)
+    sparkSqlOperationManager.sessionToClient.remove(sessionHandle)
   }
 
   /**
