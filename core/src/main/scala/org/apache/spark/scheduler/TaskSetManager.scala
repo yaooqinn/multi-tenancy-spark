@@ -63,7 +63,7 @@ private[spark] class TaskSetManager(
   val maxResultSize = Utils.getMaxResultSize(conf)
 
   // Serializer for closures and tasks.
-  val env = SparkEnv.get
+  val env = SparkEnv.get(sched.sc.sparkUser)
   val ser = env.closureSerializer.newInstance()
 
   val tasks = taskSet.tasks
@@ -679,7 +679,8 @@ private[spark] class TaskSetManager(
     // "result.value()" in "TaskResultGetter.enqueueSuccessfulTask" before reaching here.
     // Note: "result.value()" only deserializes the value when it's called at the first time, so
     // here "result.value()" just returns the value and won't block other threads.
-    sched.dagScheduler.taskEnded(tasks(index), Success, result.value(), result.accumUpdates, info)
+    sched.dagScheduler.taskEnded(
+      tasks(index), Success, result.value(), result.accumUpdates, info)
     // Kill any other attempts for the same task (since those are unnecessary now that one
     // attempt completed successfully).
     for (attemptInfo <- taskAttempts(index) if attemptInfo.running) {

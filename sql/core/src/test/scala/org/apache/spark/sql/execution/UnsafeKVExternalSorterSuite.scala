@@ -21,6 +21,8 @@ import java.util.Properties
 
 import scala.util.Random
 
+import org.apache.hadoop.security.UserGroupInformation
+
 import org.apache.spark._
 import org.apache.spark.memory.{TaskMemoryManager, TestMemoryManager}
 import org.apache.spark.sql.{RandomDataGenerator, Row}
@@ -122,9 +124,10 @@ class UnsafeKVExternalSorterSuite extends SparkFunSuite with SharedSQLContext {
       taskMemoryManager = taskMemMgr,
       localProperties = new Properties,
       metricsSystem = null))
+    val user = UserGroupInformation.getCurrentUser.getShortUserName
 
     val sorter = new UnsafeKVExternalSorter(
-      keySchema, valueSchema, SparkEnv.get.blockManager, SparkEnv.get.serializerManager,
+      keySchema, valueSchema, SparkEnv.get(user).blockManager, SparkEnv.get(user).serializerManager,
       pageSize, UnsafeExternalSorter.DEFAULT_NUM_ELEMENTS_FOR_SPILL_THRESHOLD)
 
     // Insert the keys and values into the sorter

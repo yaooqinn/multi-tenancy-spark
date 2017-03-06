@@ -49,8 +49,8 @@ private[streaming] class ReceiverSupervisorImpl(
     checkpointDirOption: Option[String]
   ) extends ReceiverSupervisor(receiver, env.conf) with Logging {
 
-  private val host = SparkEnv.get.blockManager.blockManagerId.host
-  private val executorId = SparkEnv.get.blockManager.blockManagerId.executorId
+  private val host = env.blockManager.blockManagerId.host
+  private val executorId = env.blockManager.blockManagerId.executorId
 
   private val receivedBlockHandler: ReceivedBlockHandler = {
     if (WriteAheadLogUtils.enableReceiverLog(env.conf)) {

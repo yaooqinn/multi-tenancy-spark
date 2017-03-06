@@ -17,6 +17,8 @@
 
 package org.apache.spark.sql.execution
 
+import org.apache.hadoop.security.UserGroupInformation
+
 import org.apache.spark.{SparkEnv, TaskContext}
 import org.apache.spark.executor.TaskMetrics
 import org.apache.spark.rdd.RDD
@@ -83,7 +85,8 @@ case class SortExec(
       }
     }
 
-    val pageSize = SparkEnv.get.memoryManager.pageSizeBytes
+    val user = UserGroupInformation.getCurrentUser.getShortUserName
+    val pageSize = SparkEnv.get(user).memoryManager.pageSizeBytes
     val sorter = new UnsafeExternalRowSorter(
       schema, ordering, prefixComparator, prefixComputer, pageSize, canUseRadixSort)
 

@@ -39,9 +39,12 @@ private[spark] trait BroadcastFactory {
    * @param isLocal whether we are in local mode (single JVM process)
    * @param id unique id representing this broadcast variable
    */
-  def newBroadcast[T: ClassTag](value: T, isLocal: Boolean, id: Long): Broadcast[T]
+  def newBroadcast[T: ClassTag](
+      value: T,
+      isLocal: Boolean,
+      id: Long): Broadcast[T]
 
-  def unbroadcast(id: Long, removeFromDriver: Boolean, blocking: Boolean): Unit
+  def unbroadcast(id: Long, removeFromDriver: Boolean, blocking: Boolean, user: String): Unit
 
   def stop(): Unit
 }

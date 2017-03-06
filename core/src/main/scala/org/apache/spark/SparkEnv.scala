@@ -19,11 +19,13 @@ package org.apache.spark
 
 import java.io.File
 import java.net.Socket
+import java.util.concurrent.ConcurrentHashMap
 
 import scala.collection.mutable
 import scala.util.Properties
 
 import com.google.common.collect.MapMaker
+import org.apache.hadoop.security.UserGroupInformation
 
 import org.apache.spark.annotation.DeveloperApi
 import org.apache.spark.api.python.PythonWorkerFactory
@@ -135,20 +137,25 @@ class SparkEnv (
 }
 
 object SparkEnv extends Logging {
-  @volatile private var env: SparkEnv = _
+  private val envs = new ConcurrentHashMap[String, SparkEnv]()
 
   private[spark] val driverSystemName = "sparkDriver"
   private[spark] val executorSystemName = "sparkExecutor"
 
-  def set(e: SparkEnv) {
-    env = e
+  def set(user: String, e: SparkEnv) {
+    if (e == null) {
+      envs.remove(user)
+    } else {
+      envs.put(user, e)
+    }
+
   }
 
   /**
    * Returns the SparkEnv.
    */
-  def get: SparkEnv = {
-    env
+  def get(user: String): SparkEnv = {
+    envs.get(user)
   }
 
   /**
@@ -197,6 +204,7 @@ object SparkEnv extends Logging {
       numCores: Int,
       ioEncryptionKey: Option[Array[Byte]],
       isLocal: Boolean): SparkEnv = {
+    val user = UserGroupInformation.getCurrentUser.getShortUserName
     val env = create(
       conf,
       executorId,
@@ -207,7 +215,7 @@ object SparkEnv extends Logging {
       numCores,
       ioEncryptionKey
     )
-    SparkEnv.set(env)
+    SparkEnv.set(user, env)
     env
   }
 

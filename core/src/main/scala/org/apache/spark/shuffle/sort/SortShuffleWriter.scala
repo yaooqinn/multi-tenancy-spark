@@ -17,6 +17,8 @@
 
 package org.apache.spark.shuffle.sort
 
+import org.apache.hadoop.security.UserGroupInformation
+
 import org.apache.spark._
 import org.apache.spark.internal.Logging
 import org.apache.spark.scheduler.MapStatus
@@ -32,9 +34,11 @@ private[spark] class SortShuffleWriter[K, V, C](
     context: TaskContext)
   extends ShuffleWriter[K, V] with Logging {
 
+  private val user = UserGroupInformation.getCurrentUser.getShortUserName
+
   private val dep = handle.dependency
 
-  private val blockManager = SparkEnv.get.blockManager
+  private val blockManager = SparkEnv.get(user).blockManager
 
   private var sorter: ExternalSorter[K, V, _] = null
 

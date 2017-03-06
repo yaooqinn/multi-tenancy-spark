@@ -92,11 +92,8 @@ private[spark] object Utils extends Logging {
   val DEFAULT_MAX_TO_STRING_FIELDS = 25
 
   private def maxNumToStringFields = {
-    if (SparkEnv.get != null) {
-      SparkEnv.get.conf.getInt("spark.debug.maxToStringFields", DEFAULT_MAX_TO_STRING_FIELDS)
-    } else {
-      DEFAULT_MAX_TO_STRING_FIELDS
-    }
+    val user = UserGroupInformation.getCurrentUser.getShortUserName
+    SparkEnv.get(user).conf.getInt("spark.debug.maxToStringFields", DEFAULT_MAX_TO_STRING_FIELDS)
   }
 
   /** Whether we have warned about plan string truncation yet. */
@@ -625,16 +622,17 @@ private[spark] object Utils extends Logging {
       conf: SparkConf,
       securityMgr: SecurityManager,
       hadoopConf: Configuration) {
+    val user = UserGroupInformation.getCurrentUser.getShortUserName
     val targetFile = new File(targetDir, filename)
     val uri = new URI(url)
     val fileOverwrite = conf.getBoolean("spark.files.overwrite", defaultValue = false)
     Option(uri.getScheme).getOrElse("file") match {
       case "spark" =>
-        if (SparkEnv.get == null) {
+        if (SparkEnv.get(user) == null) {
           throw new IllegalStateException(
             "Cannot retrieve files with 'spark' scheme without an active SparkEnv.")
         }
-        val source = SparkEnv.get.rpcEnv.openChannel(url)
+        val source = SparkEnv.get(user).rpcEnv.openChannel(url)
         val is = Channels.newInputStream(source)
         downloadFile(url, is, targetFile, fileOverwrite)
       case "http" | "https" | "ftp" =>

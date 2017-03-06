@@ -22,6 +22,7 @@ import java.io.{ByteArrayInputStream, ByteArrayOutputStream}
 import scala.collection.mutable.{Map, Set, Stack}
 import scala.language.existentials
 
+import org.apache.hadoop.security.UserGroupInformation
 import org.apache.xbean.asm5.{ClassReader, ClassVisitor, MethodVisitor, Type}
 import org.apache.xbean.asm5.Opcodes._
 
@@ -291,8 +292,9 @@ private[spark] object ClosureCleaner extends Logging {
 
   private def ensureSerializable(func: AnyRef) {
     try {
-      if (SparkEnv.get != null) {
-        SparkEnv.get.closureSerializer.newInstance().serialize(func)
+      val user = UserGroupInformation.getCurrentUser.getShortUserName
+      if (SparkEnv.get(user) != null) {
+        SparkEnv.get(user).closureSerializer.newInstance().serialize(func)
       }
     } catch {
       case ex: Exception => throw new SparkException("Task not serializable", ex)

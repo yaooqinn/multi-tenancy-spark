@@ -17,6 +17,8 @@
 
 package org.apache.spark.shuffle
 
+import org.apache.hadoop.security.UserGroupInformation
+
 import org.apache.spark._
 import org.apache.spark.internal.Logging
 import org.apache.spark.serializer.SerializerManager
@@ -33,10 +35,26 @@ private[spark] class BlockStoreShuffleReader[K, C](
     startPartition: Int,
     endPartition: Int,
     context: TaskContext,
-    serializerManager: SerializerManager = SparkEnv.get.serializerManager,
-    blockManager: BlockManager = SparkEnv.get.blockManager,
-    mapOutputTracker: MapOutputTracker = SparkEnv.get.mapOutputTracker)
+    var serializerManager: SerializerManager = null,
+    var blockManager: BlockManager = null,
+    var mapOutputTracker: MapOutputTracker = null)
   extends ShuffleReader[K, C] with Logging {
+
+  private val user = UserGroupInformation.getCurrentUser.getShortUserName
+
+  private val env = SparkEnv.get(user)
+
+  if (serializerManager == null) {
+    serializerManager = env.serializerManager
+  }
+
+  if (blockManager == null) {
+    blockManager = env.blockManager
+  }
+
+  if (mapOutputTracker == null) {
+    mapOutputTracker = env.mapOutputTracker
+  }
 
   private val dep = handle.dependency
 
@@ -48,8 +66,8 @@ private[spark] class BlockStoreShuffleReader[K, C](
       blockManager,
       mapOutputTracker.getMapSizesByExecutorId(handle.shuffleId, startPartition, endPartition),
       // Note: we use getSizeAsMb when no suffix is provided for backwards compatibility
-      SparkEnv.get.conf.getSizeAsMb("spark.reducer.maxSizeInFlight", "48m") * 1024 * 1024,
-      SparkEnv.get.conf.getInt("spark.reducer.maxReqsInFlight", Int.MaxValue))
+      env.conf.getSizeAsMb("spark.reducer.maxSizeInFlight", "48m") * 1024 * 1024,
+      env.conf.getInt("spark.reducer.maxReqsInFlight", Int.MaxValue))
 
     // Wrap the streams for compression and encryption based on configuration
     val wrappedStreams = blockFetcherItr.map { case (blockId, inputStream) =>

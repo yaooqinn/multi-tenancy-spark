@@ -20,8 +20,8 @@ package org.apache.spark.streaming.kafka
 import java.util.Properties
 import java.util.concurrent.{ConcurrentHashMap, ThreadPoolExecutor}
 
-import scala.collection.{mutable, Map}
-import scala.reflect.{classTag, ClassTag}
+import scala.collection.{Map, mutable}
+import scala.reflect.{ClassTag, classTag}
 
 import kafka.common.TopicAndPartition
 import kafka.consumer.{Consumer, ConsumerConfig, ConsumerConnector, KafkaStream}
@@ -30,7 +30,6 @@ import kafka.serializer.Decoder
 import kafka.utils.{VerifiableProperties, ZKGroupTopicDirs, ZKStringSerializer, ZkUtils}
 import org.I0Itec.zkclient.ZkClient
 
-import org.apache.spark.SparkEnv
 import org.apache.spark.internal.Logging
 import org.apache.spark.storage.{StorageLevel, StreamBlockId}
 import org.apache.spark.streaming.receiver.{BlockGenerator, BlockGeneratorListener, Receiver}
@@ -61,7 +60,6 @@ class ReliableKafkaReceiver[
 
   private val groupId = kafkaParams("group.id")
   private val AUTO_OFFSET_COMMIT = "auto.commit.enable"
-  private def conf = SparkEnv.get.conf
 
   /** High level consumer to connect to Kafka. */
   private var consumerConnector: ConsumerConnector = null

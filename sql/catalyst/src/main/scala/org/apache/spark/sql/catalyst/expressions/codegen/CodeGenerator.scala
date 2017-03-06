@@ -30,6 +30,8 @@ import org.codehaus.janino.{ByteArrayClassLoader, ClassBodyEvaluator, SimpleComp
 import org.codehaus.janino.util.ClassFile
 import scala.language.existentials
 
+import org.apache.hadoop.security.UserGroupInformation
+
 import org.apache.spark.SparkEnv
 import org.apache.spark.internal.Logging
 import org.apache.spark.metrics.source.CodegenMetrics
@@ -806,7 +808,9 @@ class CodegenContext {
     // be extremely expensive in certain cases, such as deeply-nested expressions which operate over
     // inputs with wide schemas. For more details on the performance issues that motivated this
     // flat, see SPARK-15680.
-    if (SparkEnv.get != null && SparkEnv.get.conf.getBoolean("spark.sql.codegen.comments", false)) {
+    val user = UserGroupInformation.getCurrentUser.getShortUserName
+    val env = SparkEnv.get(user)
+    if (env != null && env.conf.getBoolean("spark.sql.codegen.comments", false)) {
       val name = freshName("c")
       val comment = if (text.contains("\n") || text.contains("\r")) {
         text.split("(\r\n)|\r|\n").mkString("/**\n * ", "\n * ", "\n */")

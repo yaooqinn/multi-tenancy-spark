@@ -146,7 +146,7 @@ class LargeTask(stageId: Int) extends Task[Array[Byte]](stageId, 0, 0) {
   val random = new Random(0)
   random.nextBytes(randomBuffer)
 
-  override def runTask(context: TaskContext): Array[Byte] = randomBuffer
+  override def runTask(context: TaskContext, user: String): Array[Byte] = randomBuffer
   override def preferredLocations: Seq[TaskLocation] = Seq[TaskLocation]()
 }
 
@@ -995,7 +995,7 @@ class TaskSetManagerSuite extends SparkFunSuite with LocalSparkContext with Logg
   private def createTaskResult(
       id: Int,
       accumUpdates: Seq[AccumulatorV2[_, _]] = Seq.empty): DirectTaskResult[Int] = {
-    val valueSer = SparkEnv.get.serializer.newInstance()
+    val valueSer = SparkEnv.get(sc.sparkUser).serializer.newInstance()
     new DirectTaskResult[Int](valueSer.serialize(id), accumUpdates)
   }
 }

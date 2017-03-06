@@ -17,15 +17,15 @@
 
 package org.apache.spark.sql.execution.joins
 
+import org.apache.hadoop.security.UserGroupInformation
+
 import org.apache.spark._
 import org.apache.spark.rdd.{CartesianPartition, CartesianRDD, RDD}
-import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.catalyst.expressions.{Attribute, Expression, JoinedRow, UnsafeRow}
 import org.apache.spark.sql.catalyst.expressions.codegen.GenerateUnsafeRowJoiner
-import org.apache.spark.sql.execution.{BinaryExecNode, SparkPlan}
+import org.apache.spark.sql.catalyst.expressions.{Attribute, Expression, JoinedRow, UnsafeRow}
 import org.apache.spark.sql.execution.metric.SQLMetrics
-import org.apache.spark.sql.internal.SQLConf
+import org.apache.spark.sql.execution.{BinaryExecNode, SparkPlan}
 import org.apache.spark.util.CompletionIterator
 import org.apache.spark.util.collection.unsafe.sort.UnsafeExternalSorter
 
@@ -37,18 +37,20 @@ import org.apache.spark.util.collection.unsafe.sort.UnsafeExternalSorter
 class UnsafeCartesianRDD(left : RDD[UnsafeRow], right : RDD[UnsafeRow], numFieldsOfRight: Int)
   extends CartesianRDD[UnsafeRow, UnsafeRow](left.sparkContext, left, right) {
 
+  private[this] val user = UserGroupInformation.getCurrentUser.getShortUserName
+
   override def compute(split: Partition, context: TaskContext): Iterator[(UnsafeRow, UnsafeRow)] = {
     // We will not sort the rows, so prefixComparator and recordComparator are null.
     val sorter = UnsafeExternalSorter.create(
       context.taskMemoryManager(),
-      SparkEnv.get.blockManager,
-      SparkEnv.get.serializerManager,
+      SparkEnv.get(user).blockManager,
+      SparkEnv.get(user).serializerManager,
       context,
       null,
       null,
       1024,
-      SparkEnv.get.memoryManager.pageSizeBytes,
-      SparkEnv.get.conf.getLong("spark.shuffle.spill.numElementsForceSpillThreshold",
+      SparkEnv.get(user).memoryManager.pageSizeBytes,
+      SparkEnv.get(user).conf.getLong("spark.shuffle.spill.numElementsForceSpillThreshold",
         UnsafeExternalSorter.DEFAULT_NUM_ELEMENTS_FOR_SPILL_THRESHOLD),
       false)
 

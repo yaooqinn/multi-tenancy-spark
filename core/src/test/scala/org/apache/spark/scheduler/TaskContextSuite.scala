@@ -58,7 +58,7 @@ class TaskContextSuite extends SparkFunSuite with BeforeAndAfter with LocalSpark
         sys.error("failed")
       }
     }
-    val closureSerializer = SparkEnv.get.closureSerializer.newInstance()
+    val closureSerializer = SparkEnv.get(sc.sparkUser).closureSerializer.newInstance()
     val func = (c: TaskContext, i: Iterator[String]) => i.next()
     val taskBinary = sc.broadcast(JavaUtils.bufferToArray(closureSerializer.serialize((rdd, func))))
     val task = new ResultTask[String, String](
@@ -79,7 +79,7 @@ class TaskContextSuite extends SparkFunSuite with BeforeAndAfter with LocalSpark
         sys.error("damn error")
       }
     }
-    val closureSerializer = SparkEnv.get.closureSerializer.newInstance()
+    val closureSerializer = SparkEnv.get(sc.sparkUser).closureSerializer.newInstance()
     val func = (c: TaskContext, i: Iterator[String]) => i.next()
     val taskBinary = sc.broadcast(JavaUtils.bufferToArray(closureSerializer.serialize((rdd, func))))
     val task = new ResultTask[String, String](
@@ -176,13 +176,13 @@ class TaskContextSuite extends SparkFunSuite with BeforeAndAfter with LocalSpark
     val taskMetrics = TaskMetrics.empty
     val task = new Task[Int](0, 0, 0) {
       context = new TaskContextImpl(0, 0, 0L, 0,
-        new TaskMemoryManager(SparkEnv.get.memoryManager, 0L),
+        new TaskMemoryManager(SparkEnv.get(sc.sparkUser).memoryManager, 0L),
         new Properties,
-        SparkEnv.get.metricsSystem,
+        SparkEnv.get(sc.sparkUser).metricsSystem,
         taskMetrics)
       taskMetrics.registerAccumulator(acc1)
       taskMetrics.registerAccumulator(acc2)
-      override def runTask(tc: TaskContext): Int = 0
+      override def runTask(tc: TaskContext, user: String): Int = 0
     }
     // First, simulate task success. This should give us all the accumulators.
     val accumUpdates1 = task.collectAccumulatorUpdates(taskFailed = false)
@@ -199,12 +199,12 @@ class TaskContextSuite extends SparkFunSuite with BeforeAndAfter with LocalSpark
     val taskMetrics = TaskMetrics.empty
     val task = new Task[Int](0, 0, 0) {
       context = new TaskContextImpl(0, 0, 0L, 0,
-        new TaskMemoryManager(SparkEnv.get.memoryManager, 0L),
+        new TaskMemoryManager(SparkEnv.get(sc.sparkUser).memoryManager, 0L),
         new Properties,
-        SparkEnv.get.metricsSystem,
+        SparkEnv.get(sc.sparkUser).metricsSystem,
         taskMetrics)
       taskMetrics.incMemoryBytesSpilled(10)
-      override def runTask(tc: TaskContext): Int = 0
+      override def runTask(tc: TaskContext, user: String): Int = 0
     }
     val updatedAccums = task.collectAccumulatorUpdates()
     assert(updatedAccums.length == 2)

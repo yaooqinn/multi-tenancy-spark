@@ -21,14 +21,15 @@ import java.io.*;
 
 import com.google.common.io.ByteStreams;
 import com.google.common.io.Closeables;
+import org.apache.hadoop.security.UserGroupInformation;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import org.apache.spark.SparkEnv;
 import org.apache.spark.io.NioBufferedFileInputStream;
 import org.apache.spark.serializer.SerializerManager;
 import org.apache.spark.storage.BlockId;
 import org.apache.spark.unsafe.Platform;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 
 /**
  * Reads spill files written by {@link UnsafeSorterSpillWriter} (see that class for a description
@@ -57,10 +58,14 @@ public final class UnsafeSorterSpillReader extends UnsafeSorterIterator implemen
       File file,
       BlockId blockId) throws IOException {
     assert (file.length() > 0);
+    String user = UserGroupInformation.getCurrentUser().getShortUserName();
     long bufferSizeBytes =
-        SparkEnv.get() == null ?
+        SparkEnv.get(user) == null ?
             DEFAULT_BUFFER_SIZE_BYTES:
-            SparkEnv.get().conf().getSizeAsBytes("spark.unsafe.sorter.spill.reader.buffer.size",
+            SparkEnv
+                .get(user)
+                .conf()
+                .getSizeAsBytes("spark.unsafe.sorter.spill.reader.buffer.size",
                                                  DEFAULT_BUFFER_SIZE_BYTES);
     if (bufferSizeBytes > MAX_BUFFER_SIZE_BYTES || bufferSizeBytes < DEFAULT_BUFFER_SIZE_BYTES) {
       // fall back to a sane default value

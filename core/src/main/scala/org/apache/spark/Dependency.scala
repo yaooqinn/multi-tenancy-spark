@@ -70,7 +70,7 @@ abstract class NarrowDependency[T](_rdd: RDD[T]) extends Dependency[T] {
 class ShuffleDependency[K: ClassTag, V: ClassTag, C: ClassTag](
     @transient private val _rdd: RDD[_ <: Product2[K, V]],
     val partitioner: Partitioner,
-    val serializer: Serializer = SparkEnv.get.serializer,
+    var serializer: Serializer = null,
     val keyOrdering: Option[Ordering[K]] = None,
     val aggregator: Option[Aggregator[K, V, C]] = None,
     val mapSideCombine: Boolean = false)
@@ -90,6 +90,9 @@ class ShuffleDependency[K: ClassTag, V: ClassTag, C: ClassTag](
   val shuffleHandle: ShuffleHandle = _rdd.context.env.shuffleManager.registerShuffle(
     shuffleId, _rdd.partitions.length, this)
 
+  if (serializer == null) {
+    serializer = SparkEnv.get(_rdd.sparkContext.sparkUser).serializer
+  }
   _rdd.sparkContext.cleaner.foreach(_.registerShuffleForCleanup(this))
 }
 

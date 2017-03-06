@@ -21,6 +21,8 @@ import java.util.concurrent.atomic.AtomicLong
 
 import scala.reflect.ClassTag
 
+import org.apache.hadoop.security.UserGroupInformation
+
 import org.apache.spark.{SecurityManager, SparkConf}
 import org.apache.spark.internal.Logging
 
@@ -32,6 +34,7 @@ private[spark] class BroadcastManager(
 
   private var initialized = false
   private var broadcastFactory: BroadcastFactory = null
+  private val user = UserGroupInformation.getCurrentUser.getShortUserName
 
   initialize()
 
@@ -52,11 +55,14 @@ private[spark] class BroadcastManager(
 
   private val nextBroadcastId = new AtomicLong(0)
 
-  def newBroadcast[T: ClassTag](value_ : T, isLocal: Boolean): Broadcast[T] = {
+  def newBroadcast[T: ClassTag](
+      value_ : T,
+      isLocal: Boolean,
+      user: Option[String] = None): Broadcast[T] = {
     broadcastFactory.newBroadcast[T](value_, isLocal, nextBroadcastId.getAndIncrement())
   }
 
   def unbroadcast(id: Long, removeFromDriver: Boolean, blocking: Boolean) {
-    broadcastFactory.unbroadcast(id, removeFromDriver, blocking)
+    broadcastFactory.unbroadcast(id, removeFromDriver, blocking, user)
   }
 }

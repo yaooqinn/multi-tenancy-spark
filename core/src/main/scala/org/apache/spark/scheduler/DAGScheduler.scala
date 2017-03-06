@@ -185,7 +185,7 @@ class DAGScheduler(
 
   // A closure serializer that we reuse.
   // This is only safe because DAGScheduler runs in a single thread.
-  private val closureSerializer = SparkEnv.get.closureSerializer.newInstance()
+  private val closureSerializer = SparkEnv.get(sc.sparkUser).closureSerializer.newInstance()
 
   /** If enabled, FetchFailed will not cause stage retry, in order to surface the problem. */
   private val disallowStageRetryForTest = sc.getConf.getBoolean("spark.test.noStageRetry", false)

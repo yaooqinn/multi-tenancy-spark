@@ -22,6 +22,8 @@ import java.io.{IOException, ObjectOutputStream}
 import scala.collection.mutable.ArrayBuffer
 import scala.reflect.ClassTag
 
+import org.apache.hadoop.security.UserGroupInformation
+
 import org.apache.spark._
 import org.apache.spark.rdd.RDD
 import org.apache.spark.streaming.{State, StateImpl, Time}
@@ -184,6 +186,7 @@ private[streaming] class MapWithStateRDD[K: ClassTag, V: ClassTag, S: ClassTag, 
 }
 
 private[streaming] object MapWithStateRDD {
+  private val user = UserGroupInformation.getCurrentUser.getShortUserName
 
   def createFromPairRDD[K: ClassTag, V: ClassTag, S: ClassTag, E: ClassTag](
       pairRDD: RDD[(K, S)],
@@ -191,7 +194,7 @@ private[streaming] object MapWithStateRDD {
       updateTime: Time): MapWithStateRDD[K, V, S, E] = {
 
     val stateRDD = pairRDD.partitionBy(partitioner).mapPartitions ({ iterator =>
-      val stateMap = StateMap.create[K, S](SparkEnv.get.conf)
+      val stateMap = StateMap.create[K, S](SparkEnv.get(user).conf)
       iterator.foreach { case (key, state) => stateMap.put(key, state, updateTime.milliseconds) }
       Iterator(MapWithStateRDDRecord(stateMap, Seq.empty[E]))
     }, preservesPartitioning = true)
@@ -211,7 +214,7 @@ private[streaming] object MapWithStateRDD {
 
     val pairRDD = rdd.map { x => (x._1, (x._2, x._3)) }
     val stateRDD = pairRDD.partitionBy(partitioner).mapPartitions({ iterator =>
-      val stateMap = StateMap.create[K, S](SparkEnv.get.conf)
+      val stateMap = StateMap.create[K, S](SparkEnv.get(user).conf)
       iterator.foreach { case (key, (state, updateTime)) =>
         stateMap.put(key, state, updateTime)
       }

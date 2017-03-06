@@ -20,6 +20,7 @@ package org.apache.spark.shuffle
 import java.io._
 
 import com.google.common.io.ByteStreams
+import org.apache.hadoop.security.UserGroupInformation
 
 import org.apache.spark.{SparkConf, SparkEnv}
 import org.apache.spark.internal.Logging
@@ -47,7 +48,9 @@ private[spark] class IndexShuffleBlockResolver(
   extends ShuffleBlockResolver
   with Logging {
 
-  private lazy val blockManager = Option(_blockManager).getOrElse(SparkEnv.get.blockManager)
+  private val user = UserGroupInformation.getCurrentUser.getShortUserName
+
+  private lazy val blockManager = Option(_blockManager).getOrElse(SparkEnv.get(user).blockManager)
 
   private val transportConf = SparkTransportConf.fromSparkConf(conf, "shuffle")
 

@@ -20,17 +20,16 @@ package org.apache.spark.util.collection
 import java.io._
 import java.util.Comparator
 
-import scala.collection.BufferedIterator
-import scala.collection.mutable
+import scala.collection.{BufferedIterator, mutable}
 import scala.collection.mutable.ArrayBuffer
 
 import com.google.common.io.ByteStreams
+import org.apache.hadoop.security.UserGroupInformation
 
 import org.apache.spark.{SparkEnv, TaskContext}
 import org.apache.spark.annotation.DeveloperApi
 import org.apache.spark.executor.ShuffleWriteMetrics
 import org.apache.spark.internal.Logging
-import org.apache.spark.memory.TaskMemoryManager
 import org.apache.spark.serializer.{DeserializationStream, Serializer, SerializerManager}
 import org.apache.spark.storage.{BlockId, BlockManager}
 import org.apache.spark.util.CompletionIterator
@@ -57,14 +56,28 @@ class ExternalAppendOnlyMap[K, V, C](
     createCombiner: V => C,
     mergeValue: (C, V) => C,
     mergeCombiners: (C, C) => C,
-    serializer: Serializer = SparkEnv.get.serializer,
-    blockManager: BlockManager = SparkEnv.get.blockManager,
+    var serializer: Serializer = null,
+    var blockManager: BlockManager = null,
     context: TaskContext = TaskContext.get(),
-    serializerManager: SerializerManager = SparkEnv.get.serializerManager)
+    var serializerManager: SerializerManager = null)
   extends Spillable[SizeTracker](context.taskMemoryManager())
   with Serializable
   with Logging
   with Iterable[(K, C)] {
+
+  private val env = SparkEnv.get(user)
+
+  if (serializer == null) {
+    serializer = env.serializer
+  }
+
+  if (blockManager == null) {
+    blockManager = env.blockManager
+  }
+
+  if (serializerManager == null) {
+    serializerManager = env.serializerManager
+  }
 
   if (context == null) {
     throw new IllegalStateException(
@@ -83,7 +96,7 @@ class ExternalAppendOnlyMap[K, V, C](
 
   @volatile private var currentMap = new SizeTrackingAppendOnlyMap[K, C]
   private val spilledMaps = new ArrayBuffer[DiskMapIterator]
-  private val sparkConf = SparkEnv.get.conf
+  private val sparkConf = env.conf
   private val diskBlockManager = blockManager.diskBlockManager
 
   /**

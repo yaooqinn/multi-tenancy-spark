@@ -19,11 +19,11 @@ package org.apache.spark.sql.execution.joins
 
 import java.io._
 
-import com.esotericsoftware.kryo.{Kryo, KryoSerializable}
 import com.esotericsoftware.kryo.io.{Input, Output}
+import com.esotericsoftware.kryo.{Kryo, KryoSerializable}
+import org.apache.hadoop.security.UserGroupInformation
 
-import org.apache.spark.{SparkConf, SparkEnv, SparkException}
-import org.apache.spark.memory.{MemoryConsumer, MemoryMode, StaticMemoryManager, TaskMemoryManager}
+import org.apache.spark.memory.{MemoryConsumer, StaticMemoryManager, TaskMemoryManager}
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans.physical.BroadcastMode
@@ -31,6 +31,7 @@ import org.apache.spark.sql.types.LongType
 import org.apache.spark.unsafe.Platform
 import org.apache.spark.unsafe.map.BytesToBytesMap
 import org.apache.spark.util.{KnownSizeEstimation, Utils}
+import org.apache.spark.{SparkConf, SparkEnv, SparkException}
 
 /**
  * Interface for a hashed relation by some key. Use [[HashedRelation.apply]] to create a concrete
@@ -232,8 +233,9 @@ private[joins] class UnsafeHashedRelation(
         Long.MaxValue,
         1),
       0)
+    val user = UserGroupInformation.getCurrentUser.getShortUserName
 
-    val pageSizeBytes = Option(SparkEnv.get).map(_.memoryManager.pageSizeBytes)
+    val pageSizeBytes = Option(SparkEnv.get(user)).map(_.memoryManager.pageSizeBytes)
       .getOrElse(new SparkConf().getSizeAsBytes("spark.buffer.pageSize", "16m"))
 
     // TODO(josh): We won't need this dummy memory manager after future refactorings; revisit
@@ -283,7 +285,10 @@ private[joins] object UnsafeHashedRelation {
       sizeEstimate: Int,
       taskMemoryManager: TaskMemoryManager): HashedRelation = {
 
-    val pageSizeBytes = Option(SparkEnv.get).map(_.memoryManager.pageSizeBytes)
+    val user = UserGroupInformation.getCurrentUser.getShortUserName
+
+
+    val pageSizeBytes = Option(SparkEnv.get(user)).map(_.memoryManager.pageSizeBytes)
       .getOrElse(new SparkConf().getSizeAsBytes("spark.buffer.pageSize", "16m"))
 
     val binaryMap = new BytesToBytesMap(

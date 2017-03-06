@@ -17,14 +17,15 @@
 
 package org.apache.spark.unsafe.map;
 
-import javax.annotation.Nullable;
 import java.io.File;
 import java.io.IOException;
 import java.util.Iterator;
 import java.util.LinkedList;
+import javax.annotation.Nullable;
 
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.io.Closeables;
+import org.apache.hadoop.security.UserGroupInformation;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -172,8 +173,8 @@ public final class BytesToBytesMap extends MemoryConsumer {
 
   private final int initialCapacity;
 
-  private final BlockManager blockManager;
-  private final SerializerManager serializerManager;
+  private BlockManager blockManager;
+  private SerializerManager serializerManager;
   private volatile MapIterator destructiveIterator = null;
   private LinkedList<UnsafeSorterSpillWriter> spillWriters = new LinkedList<>();
 
@@ -222,13 +223,25 @@ public final class BytesToBytesMap extends MemoryConsumer {
       boolean enablePerfMetrics) {
     this(
       taskMemoryManager,
-      SparkEnv.get() != null ? SparkEnv.get().blockManager() :  null,
-      SparkEnv.get() != null ? SparkEnv.get().serializerManager() :  null,
+      null,
+      null,
       initialCapacity,
       // In order to re-use the longArray for sorting, the load factor cannot be larger than 0.5.
       0.5,
       pageSizeBytes,
       enablePerfMetrics);
+    String user = null;
+    try {
+      user = UserGroupInformation.getCurrentUser().getShortUserName();
+    } catch (IOException e) {
+      Platform.throwException(e);
+    }
+    SparkEnv sparkEnv = SparkEnv.get(user);
+    if (sparkEnv != null ) {
+      this.blockManager = SparkEnv.get(user).blockManager();
+      this.serializerManager = SparkEnv.get(user).serializerManager();
+    }
+
   }
 
   /**

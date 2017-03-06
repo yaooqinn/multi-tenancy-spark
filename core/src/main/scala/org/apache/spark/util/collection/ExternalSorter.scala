@@ -91,11 +91,17 @@ private[spark] class ExternalSorter[K, V, C](
     aggregator: Option[Aggregator[K, V, C]] = None,
     partitioner: Option[Partitioner] = None,
     ordering: Option[Ordering[K]] = None,
-    serializer: Serializer = SparkEnv.get.serializer)
+    var serializer: Serializer = null)
   extends Spillable[WritablePartitionedPairCollection[K, C]](context.taskMemoryManager())
   with Logging {
 
-  private val conf = SparkEnv.get.conf
+  private val env = SparkEnv.get(user)
+
+  if (serializer == null) {
+    serializer = env.serializer
+  }
+
+  private val conf = env.conf
 
   private val numPartitions = partitioner.map(_.numPartitions).getOrElse(1)
   private val shouldPartition = numPartitions > 1
@@ -103,9 +109,9 @@ private[spark] class ExternalSorter[K, V, C](
     if (shouldPartition) partitioner.get.getPartition(key) else 0
   }
 
-  private val blockManager = SparkEnv.get.blockManager
+  private val blockManager = env.blockManager
   private val diskBlockManager = blockManager.diskBlockManager
-  private val serializerManager = SparkEnv.get.serializerManager
+  private val serializerManager = env.serializerManager
   private val serInstance = serializer.newInstance()
 
   // Use getSizeAsKb (not bytes) to maintain backwards compatibility if no units are provided

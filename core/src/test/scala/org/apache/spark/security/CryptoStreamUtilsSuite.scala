@@ -102,8 +102,9 @@ class CryptoStreamUtilsSuite extends SparkFunSuite {
       val encrypted = sc.parallelize(Seq(1))
         .map { str =>
           val bytes = new ByteArrayOutputStream()
-          val out = CryptoStreamUtils.createCryptoOutputStream(bytes, SparkEnv.get.conf,
-            SparkEnv.get.securityManager.getIOEncryptionKey().get)
+          val out = CryptoStreamUtils.createCryptoOutputStream(bytes,
+            SparkEnv.get(sc.sparkUser).conf,
+            SparkEnv.get(sc.sparkUser).securityManager.getIOEncryptionKey().get)
           out.write(content.getBytes(UTF_8))
           out.close()
           bytes.toByteArray()
@@ -112,7 +113,7 @@ class CryptoStreamUtilsSuite extends SparkFunSuite {
       assert(content != encrypted)
 
       val in = CryptoStreamUtils.createCryptoInputStream(new ByteArrayInputStream(encrypted),
-        sc.conf, SparkEnv.get.securityManager.getIOEncryptionKey().get)
+        sc.conf, SparkEnv.get(sc.sparkUser).securityManager.getIOEncryptionKey().get)
       val decrypted = new String(ByteStreams.toByteArray(in), UTF_8)
       assert(content === decrypted)
     } finally {

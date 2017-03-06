@@ -17,10 +17,11 @@
 
 package org.apache.spark.sql.execution;
 
-import javax.annotation.Nullable;
 import java.io.IOException;
+import javax.annotation.Nullable;
 
 import com.google.common.annotations.VisibleForTesting;
+import org.apache.hadoop.security.UserGroupInformation;
 
 import org.apache.spark.SparkEnv;
 import org.apache.spark.TaskContext;
@@ -82,6 +83,7 @@ public final class UnsafeKVExternalSorter {
 
     TaskMemoryManager taskMemoryManager = taskContext.taskMemoryManager();
 
+    String user = UserGroupInformation.getCurrentUser().getShortUserName();
     if (map == null) {
       sorter = UnsafeExternalSorter.create(
         taskMemoryManager,
@@ -90,7 +92,7 @@ public final class UnsafeKVExternalSorter {
         taskContext,
         recordComparator,
         prefixComparator,
-        SparkEnv.get().conf().getInt("spark.shuffle.sort.initialBufferSize",
+        SparkEnv.get(user).conf().getInt("spark.shuffle.sort.initialBufferSize",
                                      UnsafeExternalRowSorter.DEFAULT_INITIAL_SORT_BUFFER_SIZE),
         pageSizeBytes,
         numElementsForSpillThreshold,
@@ -137,7 +139,7 @@ public final class UnsafeKVExternalSorter {
         taskContext,
         new KVComparator(ordering, keySchema.length()),
         prefixComparator,
-        SparkEnv.get().conf().getInt("spark.shuffle.sort.initialBufferSize",
+        SparkEnv.get(user).conf().getInt("spark.shuffle.sort.initialBufferSize",
                                      UnsafeExternalRowSorter.DEFAULT_INITIAL_SORT_BUFFER_SIZE),
         pageSizeBytes,
         numElementsForSpillThreshold,

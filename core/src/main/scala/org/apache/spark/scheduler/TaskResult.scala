@@ -22,6 +22,8 @@ import java.nio.ByteBuffer
 
 import scala.collection.mutable.ArrayBuffer
 
+import org.apache.hadoop.security.UserGroupInformation
+
 import org.apache.spark.SparkEnv
 import org.apache.spark.serializer.SerializerInstance
 import org.apache.spark.storage.BlockId
@@ -42,6 +44,8 @@ private[spark] class DirectTaskResult[T](
 
   private var valueObjectDeserialized = false
   private var valueObject: T = _
+
+  private val user = UserGroupInformation.getCurrentUser.getShortUserName
 
   def this() = this(null.asInstanceOf[ByteBuffer], null)
 
@@ -84,7 +88,7 @@ private[spark] class DirectTaskResult[T](
     } else {
       // This should not run when holding a lock because it may cost dozens of seconds for a large
       // value
-      val ser = if (resultSer == null) SparkEnv.get.serializer.newInstance() else resultSer
+      val ser = if (resultSer == null) SparkEnv.get(user).serializer.newInstance() else resultSer
       valueObject = ser.deserialize(valueBytes)
       valueObjectDeserialized = true
       valueObject

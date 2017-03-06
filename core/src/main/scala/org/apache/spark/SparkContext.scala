@@ -234,6 +234,8 @@ class SparkContext(config: SparkConf, user: Option[String]) extends Logging {
    */
   def getConf: SparkConf = conf.clone()
 
+  def getUser: Option[String] = user
+
   def jars: Seq[String] = _jars
   def files: Seq[String] = _files
   def master: String = _conf.get("spark.master")
@@ -259,7 +261,8 @@ class SparkContext(config: SparkConf, user: Option[String]) extends Logging {
       conf: SparkConf,
       isLocal: Boolean,
       listenerBus: LiveListenerBus): SparkEnv = {
-    SparkEnv.createDriverEnv(conf, isLocal, listenerBus, SparkContext.numDriverCores(master))
+    SparkEnv.createDriverEnv(
+      conf, isLocal, listenerBus, SparkContext.numDriverCores(master), None)
   }
 
   private[spark] def env: SparkEnv = _env
@@ -435,7 +438,7 @@ class SparkContext(config: SparkConf, user: Option[String]) extends Logging {
 
     // Create the Spark execution environment (cache, map output tracker, etc)
     _env = createSparkEnv(_conf, isLocal, listenerBus)
-    SparkEnv.set(_env)
+    SparkEnv.set(sparkUser, _env)
 
     // If running the REPL, register the repl's output dir with the file server.
     _conf.getOption("spark.repl.class.outputDir").foreach { path =>
@@ -1413,7 +1416,7 @@ class SparkContext(config: SparkConf, user: Option[String]) extends Logging {
     assertNotStopped()
     require(!classOf[RDD[_]].isAssignableFrom(classTag[T].runtimeClass),
       "Can not directly broadcast RDDs; instead, call collect() and broadcast the result.")
-    val bc = env.broadcastManager.newBroadcast[T](value, isLocal)
+    val bc = env.broadcastManager.newBroadcast[T](value, isLocal, user)
     val callSite = getCallSite
     logInfo("Created broadcast " + bc.id + " from " + callSite.shortForm)
     cleaner.foreach(_.registerBroadcastForCleanup(bc))
@@ -1479,7 +1482,7 @@ class SparkContext(config: SparkConf, user: Option[String]) extends Logging {
       logInfo(s"Added file $path at $key with timestamp $timestamp")
       // Fetch the file locally so that closures which are run on the driver can still use the
       // SparkFiles API to access files.
-      Utils.fetchFile(uri.toString, new File(SparkFiles.getRootDirectory()), conf,
+      Utils.fetchFile(uri.toString, new File(SparkFiles.getRootDirectory), conf,
         env.securityManager, hadoopConfiguration, timestamp, useCache = false)
       postEnvironmentUpdate()
     }
@@ -1846,7 +1849,7 @@ class SparkContext(config: SparkConf, user: Option[String]) extends Logging {
       Utils.tryLogNonFatalError {
         _env.stop()
       }
-      SparkEnv.set(null)
+      SparkEnv.set(sparkUser, null)
     }
     // Unset YARN mode system env variable, to allow switching between cluster types.
     System.clearProperty("SPARK_YARN_MODE")
@@ -2096,7 +2099,7 @@ class SparkContext(config: SparkConf, user: Option[String]) extends Logging {
    *   serializable
    */
   private[spark] def clean[F <: AnyRef](f: F, checkSerializable: Boolean = true): F = {
-    ClosureCleaner.clean(f, checkSerializable)
+    ClosureCleaner.clean(f, checkSerializable, true)
     f
   }
 

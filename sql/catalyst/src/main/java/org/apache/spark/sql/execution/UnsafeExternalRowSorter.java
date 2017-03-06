@@ -23,6 +23,7 @@ import scala.collection.Iterator;
 import scala.math.Ordering;
 
 import com.google.common.annotations.VisibleForTesting;
+import org.apache.hadoop.security.UserGroupInformation;
 
 import org.apache.spark.SparkEnv;
 import org.apache.spark.TaskContext;
@@ -50,6 +51,7 @@ public final class UnsafeExternalRowSorter {
   private final StructType schema;
   private final PrefixComputer prefixComputer;
   private final UnsafeExternalSorter sorter;
+  private final String user = UserGroupInformation.getCurrentUser().getShortUserName();
 
   public abstract static class PrefixComputer {
 
@@ -77,7 +79,7 @@ public final class UnsafeExternalRowSorter {
       boolean canUseRadixSort) throws IOException {
     this.schema = schema;
     this.prefixComputer = prefixComputer;
-    final SparkEnv sparkEnv = SparkEnv.get();
+    final SparkEnv sparkEnv = SparkEnv.get(user);
     final TaskContext taskContext = TaskContext.get();
     sorter = UnsafeExternalSorter.create(
       taskContext.taskMemoryManager(),
@@ -89,7 +91,7 @@ public final class UnsafeExternalRowSorter {
       sparkEnv.conf().getInt("spark.shuffle.sort.initialBufferSize",
                              DEFAULT_INITIAL_SORT_BUFFER_SIZE),
       pageSizeBytes,
-      SparkEnv.get().conf().getLong("spark.shuffle.spill.numElementsForceSpillThreshold",
+      sparkEnv.conf().getLong("spark.shuffle.spill.numElementsForceSpillThreshold",
         UnsafeExternalSorter.DEFAULT_NUM_ELEMENTS_FOR_SPILL_THRESHOLD),
       canUseRadixSort
     );

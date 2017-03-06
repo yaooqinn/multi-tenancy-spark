@@ -20,6 +20,8 @@ package org.apache.spark.sql.execution.window
 import scala.collection.mutable
 import scala.collection.mutable.ArrayBuffer
 
+import org.apache.hadoop.security.UserGroupInformation
+
 import org.apache.spark.{SparkEnv, TaskContext}
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.InternalRow
@@ -292,6 +294,7 @@ case class WindowExec(
         // Get all relevant projections.
         val result = createResultProjection(expressions)
         val grouping = UnsafeProjection.create(partitionSpec, child.output)
+        val user = UserGroupInformation.getCurrentUser.getShortUserName
 
         // Manage the stream and the grouping.
         var nextRow: UnsafeRow = null
@@ -339,15 +342,16 @@ case class WindowExec(
                 // We will not sort the rows, so prefixComparator and recordComparator are null.
                 sorter = UnsafeExternalSorter.create(
                   TaskContext.get().taskMemoryManager(),
-                  SparkEnv.get.blockManager,
-                  SparkEnv.get.serializerManager,
+                  SparkEnv.get(user).blockManager,
+                  SparkEnv.get(user).serializerManager,
                   TaskContext.get(),
                   null,
                   null,
                   1024,
-                  SparkEnv.get.memoryManager.pageSizeBytes,
-                  SparkEnv.get.conf.getLong("spark.shuffle.spill.numElementsForceSpillThreshold",
-                    UnsafeExternalSorter.DEFAULT_NUM_ELEMENTS_FOR_SPILL_THRESHOLD),
+                  SparkEnv.get(user).memoryManager.pageSizeBytes,
+                  SparkEnv.get(user).conf
+                    .getLong("spark.shuffle.spill.numElementsForceSpillThreshold",
+                      UnsafeExternalSorter.DEFAULT_NUM_ELEMENTS_FOR_SPILL_THRESHOLD),
                   false)
                 rows.foreach { r =>
                   sorter.insertRecord(r.getBaseObject, r.getBaseOffset, r.getSizeInBytes, 0, false)

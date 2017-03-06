@@ -23,6 +23,7 @@ import scala.collection.mutable
 import scala.util.control.NonFatal
 
 import org.apache.hadoop.conf.Configuration
+import org.apache.hadoop.security.UserGroupInformation
 
 import org.apache.spark.SparkEnv
 import org.apache.spark.internal.Logging
@@ -124,6 +125,8 @@ object StateStore extends Logging {
   val MAINTENANCE_INTERVAL_CONFIG = "spark.sql.streaming.stateStore.maintenanceInterval"
   val MAINTENANCE_INTERVAL_DEFAULT_SECS = 60
 
+  private val user = UserGroupInformation.getCurrentUser.getShortUserName
+
   private val loadedProviders = new mutable.HashMap[StateStoreId, StateStoreProvider]()
   private val maintenanceTaskExecutor =
     ThreadUtils.newDaemonSingleThreadScheduledExecutor("state-store-maintenance-task")
@@ -178,7 +181,7 @@ object StateStore extends Logging {
 
   /** Start the periodic maintenance task if not already started and if Spark active */
   private def startMaintenanceIfNeeded(): Unit = loadedProviders.synchronized {
-    val env = SparkEnv.get
+    val env = SparkEnv.get(user)
     if (maintenanceTask == null && env != null) {
       val periodMs = env.conf.getTimeAsMs(
         MAINTENANCE_INTERVAL_CONFIG, s"${MAINTENANCE_INTERVAL_DEFAULT_SECS}s")
@@ -197,7 +200,7 @@ object StateStore extends Logging {
    */
   private def doMaintenance(): Unit = {
     logDebug("Doing maintenance")
-    if (SparkEnv.get == null) {
+    if (SparkEnv.get(user) == null) {
       stop()
     } else {
       loadedProviders.synchronized { loadedProviders.toSeq }.foreach { case (id, provider) =>
@@ -218,17 +221,17 @@ object StateStore extends Logging {
   }
 
   private def reportActiveStoreInstance(storeId: StateStoreId): Unit = {
-    if (SparkEnv.get != null) {
-      val host = SparkEnv.get.blockManager.blockManagerId.host
-      val executorId = SparkEnv.get.blockManager.blockManagerId.executorId
+    if (SparkEnv.get(user) != null) {
+      val host = SparkEnv.get(user).blockManager.blockManagerId.host
+      val executorId = SparkEnv.get(user).blockManager.blockManagerId.executorId
       coordinatorRef.foreach(_.reportActiveInstance(storeId, host, executorId))
       logDebug(s"Reported that the loaded instance $storeId is active")
     }
   }
 
   private def verifyIfStoreInstanceActive(storeId: StateStoreId): Boolean = {
-    if (SparkEnv.get != null) {
-      val executorId = SparkEnv.get.blockManager.blockManagerId.executorId
+    if (SparkEnv.get(user) != null) {
+      val executorId = SparkEnv.get(user).blockManager.blockManagerId.executorId
       val verified =
         coordinatorRef.map(_.verifyIfInstanceActive(storeId, executorId)).getOrElse(false)
       logDebug(s"Verified whether the loaded instance $storeId is active: $verified")
@@ -239,7 +242,7 @@ object StateStore extends Logging {
   }
 
   private def coordinatorRef: Option[StateStoreCoordinatorRef] = synchronized {
-    val env = SparkEnv.get
+    val env = SparkEnv.get(user)
     if (env != null) {
       if (_coordRef == null) {
         _coordRef = StateStoreCoordinatorRef.forExecutor(env)

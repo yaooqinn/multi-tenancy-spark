@@ -30,7 +30,8 @@ private[spark]
 class BlockRDD[T: ClassTag](sc: SparkContext, @transient val blockIds: Array[BlockId])
   extends RDD[T](sc, Nil) {
 
-  @transient lazy val _locations = BlockManager.blockIdsToHosts(blockIds, SparkEnv.get)
+  @transient lazy val _locations =
+    BlockManager.blockIdsToHosts(blockIds, SparkEnv.get(sc.sparkUser))
   @volatile private var _isValid = true
 
   override def getPartitions: Array[Partition] = {
@@ -42,7 +43,7 @@ class BlockRDD[T: ClassTag](sc: SparkContext, @transient val blockIds: Array[Blo
 
   override def compute(split: Partition, context: TaskContext): Iterator[T] = {
     assertValid()
-    val blockManager = SparkEnv.get.blockManager
+    val blockManager = SparkEnv.get(sc.sparkUser).blockManager
     val blockId = split.asInstanceOf[BlockRDDPartition].blockId
     blockManager.get[T](blockId) match {
       case Some(block) => block.data.asInstanceOf[Iterator[T]]

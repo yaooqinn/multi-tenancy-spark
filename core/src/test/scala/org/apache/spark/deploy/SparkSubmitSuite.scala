@@ -721,7 +721,7 @@ object SimpleApplicationTest {
       val masterValue = conf.get(config)
       val executorValues = sc
         .makeRDD(1 to 100, 10)
-        .map(x => SparkEnv.get.conf.get(config))
+        .map(x => SparkEnv.get(sc.sparkUser).conf.get(config))
         .collect()
         .distinct
       if (executorValues.size != 1) {

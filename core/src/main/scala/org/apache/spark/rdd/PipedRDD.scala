@@ -17,12 +17,7 @@
 
 package org.apache.spark.rdd
 
-import java.io.BufferedWriter
-import java.io.File
-import java.io.FilenameFilter
-import java.io.IOException
-import java.io.OutputStreamWriter
-import java.io.PrintWriter
+import java.io._
 import java.util.StringTokenizer
 import java.util.concurrent.atomic.AtomicReference
 
@@ -32,8 +27,8 @@ import scala.collection.mutable.ArrayBuffer
 import scala.io.Source
 import scala.reflect.ClassTag
 
-import org.apache.spark.{Partition, SparkEnv, TaskContext}
 import org.apache.spark.util.Utils
+import org.apache.spark.{Partition, TaskContext}
 
 
 /**
@@ -109,7 +104,6 @@ private[spark] class PipedRDD[T: ClassTag](
     }
 
     val proc = pb.start()
-    val env = SparkEnv.get
     val childThreadException = new AtomicReference[Throwable](null)
 
     // Start a thread to print the process's stderr to ours

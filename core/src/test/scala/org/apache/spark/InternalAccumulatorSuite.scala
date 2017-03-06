@@ -17,7 +17,6 @@
 
 package org.apache.spark
 
-import scala.collection.JavaConverters._
 import scala.collection.mutable.ArrayBuffer
 
 import org.apache.spark.executor.TaskMetrics
@@ -139,7 +138,7 @@ class InternalAccumulatorSuite extends SparkFunSuite with LocalSparkContext {
       val isFirstStageAttempt = taskContext.taskAttemptId() < numPartitions * 2
       if (isFirstStageAttempt) {
         throw new FetchFailedException(
-          SparkEnv.get.blockManager.blockManagerId,
+          SparkEnv.get(sc.sparkUser).blockManager.blockManagerId,
           sid,
           taskContext.partitionId(),
           taskContext.partitionId(),

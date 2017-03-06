@@ -19,6 +19,8 @@ package org.apache.spark.sql.execution;
 
 import java.io.IOException;
 
+import org.apache.hadoop.security.UserGroupInformation;
+
 import org.apache.spark.SparkEnv;
 import org.apache.spark.memory.TaskMemoryManager;
 import org.apache.spark.sql.catalyst.InternalRow;
@@ -96,7 +98,7 @@ public final class UnsafeFixedWidthAggregationMap {
       TaskMemoryManager taskMemoryManager,
       int initialCapacity,
       long pageSizeBytes,
-      boolean enablePerfMetrics) {
+      boolean enablePerfMetrics) throws IOException {
     this.aggregationBufferSchema = aggregationBufferSchema;
     this.currentAggregationBuffer = new UnsafeRow(aggregationBufferSchema.length());
     this.groupingKeyProjection = UnsafeProjection.create(groupingKeySchema);
@@ -241,13 +243,15 @@ public final class UnsafeFixedWidthAggregationMap {
    * used to insert records.
    */
   public UnsafeKVExternalSorter destructAndCreateExternalSorter() throws IOException {
+    String user = UserGroupInformation.getCurrentUser().getShortUserName();
+    SparkEnv sparkEnv = SparkEnv.get(user);
     return new UnsafeKVExternalSorter(
       groupingKeySchema,
       aggregationBufferSchema,
-      SparkEnv.get().blockManager(),
-      SparkEnv.get().serializerManager(),
+      sparkEnv.blockManager(),
+      sparkEnv.serializerManager(),
       map.getPageSizeBytes(),
-      SparkEnv.get().conf().getLong("spark.shuffle.spill.numElementsForceSpillThreshold",
+      sparkEnv.conf().getLong("spark.shuffle.spill.numElementsForceSpillThreshold",
         UnsafeExternalSorter.DEFAULT_NUM_ELEMENTS_FOR_SPILL_THRESHOLD),
       map);
   }

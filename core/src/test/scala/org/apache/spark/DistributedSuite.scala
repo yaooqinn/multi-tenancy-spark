@@ -164,9 +164,9 @@ class DistributedSuite extends SparkFunSuite with Matchers with LocalSparkContex
     // from those locations.
     val blockIds = data.partitions.indices.map(index => RDDBlockId(data.id, index)).toArray
     val blockId = blockIds(0)
-    val blockManager = SparkEnv.get.blockManager
+    val blockManager = SparkEnv.get(sc.sparkUser).blockManager
     val blockTransfer = blockManager.blockTransferService
-    val serializerManager = SparkEnv.get.serializerManager
+    val serializerManager = SparkEnv.get(sc.sparkUser).serializerManager
     blockManager.master.getLocations(blockId).foreach { cmId =>
       val bytes = blockTransfer.fetchBlockSync(cmId.host, cmId.port, cmId.executorId,
         blockId.toString)

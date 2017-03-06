@@ -19,21 +19,25 @@ package org.apache.spark
 
 import java.io.File
 
+import org.apache.hadoop.security.UserGroupInformation
+
 /**
  * Resolves paths to files added through `SparkContext.addFile()`.
  */
 object SparkFiles {
 
+  private val user = UserGroupInformation.getCurrentUser.getShortUserName
+
   /**
    * Get the absolute path of a file added through `SparkContext.addFile()`.
    */
   def get(filename: String): String =
-    new File(getRootDirectory(), filename).getAbsolutePath()
+    new File(getRootDirectory(), filename).getAbsolutePath
 
   /**
    * Get the root directory that contains files added through `SparkContext.addFile()`.
    */
   def getRootDirectory(): String =
-    SparkEnv.get.driverTmpDir.getOrElse(".")
+    SparkEnv.get(user).driverTmpDir.getOrElse(".")
 
 }
