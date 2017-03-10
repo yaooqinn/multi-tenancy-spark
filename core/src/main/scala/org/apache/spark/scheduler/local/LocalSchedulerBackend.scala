@@ -21,9 +21,6 @@ import java.io.File
 import java.net.URL
 import java.nio.ByteBuffer
 
-import org.apache.hadoop.security.UserGroupInformation
-
-import org.apache.spark.{SparkConf, SparkContext, SparkEnv, TaskState}
 import org.apache.spark.TaskState.TaskState
 import org.apache.spark.executor.{Executor, ExecutorBackend}
 import org.apache.spark.internal.Logging
@@ -31,6 +28,8 @@ import org.apache.spark.launcher.{LauncherBackend, SparkAppHandle}
 import org.apache.spark.rpc.{RpcCallContext, RpcEndpointRef, RpcEnv, ThreadSafeRpcEndpoint}
 import org.apache.spark.scheduler._
 import org.apache.spark.scheduler.cluster.ExecutorInfo
+import org.apache.spark.util.Utils
+import org.apache.spark.{SparkConf, SparkContext, SparkEnv, TaskState}
 
 private case class ReviveOffers()
 
@@ -58,7 +57,7 @@ private[spark] class LocalEndpoint(
   val localExecutorId = SparkContext.DRIVER_IDENTIFIER
   val localExecutorHostname = "localhost"
 
-  private val user = UserGroupInformation.getCurrentUser.getShortUserName
+  private val user = Utils.getCurrentUserName
 
   private val executor = new Executor(
     localExecutorId, localExecutorHostname, SparkEnv.get(user), userClassPath, isLocal = true)

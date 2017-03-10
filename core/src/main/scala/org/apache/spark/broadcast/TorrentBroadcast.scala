@@ -25,8 +25,6 @@ import scala.collection.JavaConverters._
 import scala.reflect.ClassTag
 import scala.util.Random
 
-import org.apache.hadoop.security.UserGroupInformation
-
 import org.apache.spark._
 import org.apache.spark.internal.Logging
 import org.apache.spark.io.CompressionCodec
@@ -59,7 +57,7 @@ import org.apache.spark.util.io.{ChunkedByteBuffer, ChunkedByteBufferOutputStrea
 private[spark] class TorrentBroadcast[T: ClassTag](obj: T, id: Long)
   extends Broadcast[T](id) with Logging with Serializable {
 
-  private val user = UserGroupInformation.getCurrentUser.getShortUserName
+  private val user = Utils.getCurrentUserName
 
   /**
    * Value of the broadcast object on executors. This is reconstructed by [[readBroadcastBlock]],

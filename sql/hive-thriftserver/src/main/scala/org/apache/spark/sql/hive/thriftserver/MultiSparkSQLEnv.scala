@@ -36,7 +36,7 @@ import org.apache.spark.sql.hive.config._
 
 private[hive] object MultiSparkSQLEnv extends Logging{
 
-  logInfo("Initializing multiple Spark SQL Environments")
+  logInfo("Initializing multiple Spark SQL Environments...")
 
   val version = SPARK_VERSION
 
@@ -55,7 +55,7 @@ private[hive] object MultiSparkSQLEnv extends Logging{
     require(users.nonEmpty, s"No user is configured in ${PROXY_USERS.key}, please specify the " +
       s"users who can impersonate the Real User [${globalUgi.getUserName}]")
 
-    initQueue(users, originConf)
+    initQueues(users, originConf)
 
     users.foreach { user =>
       logInfo(s"Starting SparkContext for $user")
@@ -163,7 +163,7 @@ private[hive] object MultiSparkSQLEnv extends Logging{
     }
   }
 
-  private def initQueue(users: Seq[String], conf: SparkConf): Unit = {
+  private def initQueues(users: Seq[String], conf: SparkConf): Unit = {
     logInfo(s"Getting queue for users: ${users.toString}")
     val defaultQueue = conf.get("spark.yarn.queue", "default")
     users.foreach { user =>

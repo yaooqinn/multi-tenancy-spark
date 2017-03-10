@@ -24,8 +24,6 @@ import java.util.Arrays
 import scala.io.Source
 import scala.util.Try
 
-import org.apache.hadoop.security.UserGroupInformation
-
 import org.apache.spark._
 import org.apache.spark.broadcast.Broadcast
 import org.apache.spark.internal.Logging
@@ -118,7 +116,7 @@ private[spark] class RRunner[U](
       output: OutputStream,
       iter: Iterator[_],
       partitionIndex: Int): Unit = {
-    val user = UserGroupInformation.getCurrentUser.getShortUserName
+    val user = Utils.getCurrentUserName
     val env = SparkEnv.get(user)
     val taskContext = TaskContext.get()
     val bufferSize = System.getProperty("spark.buffer.size", "65536").toInt
@@ -127,7 +125,6 @@ private[spark] class RRunner[U](
     new Thread("writer for R") {
       override def run(): Unit = {
         try {
-          val user = UserGroupInformation.getCurrentUser.getShortUserName
           SparkEnv.set(user, env)
           TaskContext.setTaskContext(taskContext)
           val dataOut = new DataOutputStream(stream)
@@ -318,7 +315,7 @@ private[r] object RRunner {
   // also fall back to launching workers (worker.R) directly.
   private[this] var errThread: BufferedStreamThread = _
   private[this] var daemonChannel: DataOutputStream = _
-  private[this] val user = UserGroupInformation.getCurrentUser.getShortUserName
+  private[this] val user = Utils.getCurrentUserName
 
 
   /**

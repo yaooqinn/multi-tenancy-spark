@@ -22,8 +22,6 @@ import java.nio.ByteBuffer
 
 import scala.collection.mutable.ArrayBuffer
 
-import org.apache.hadoop.security.UserGroupInformation
-
 import org.apache.spark.SparkEnv
 import org.apache.spark.serializer.SerializerInstance
 import org.apache.spark.storage.BlockId
@@ -45,7 +43,7 @@ private[spark] class DirectTaskResult[T](
   private var valueObjectDeserialized = false
   private var valueObject: T = _
 
-  private val user = UserGroupInformation.getCurrentUser.getShortUserName
+  private val user = Utils.getCurrentUserName
 
   def this() = this(null.asInstanceOf[ByteBuffer], null)
 

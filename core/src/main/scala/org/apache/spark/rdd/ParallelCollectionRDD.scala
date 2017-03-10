@@ -37,9 +37,6 @@ private[spark] class ParallelCollectionPartition[T: ClassTag](
     var values: Seq[T]
   ) extends Partition with Serializable {
 
-  @transient private val user = UserGroupInformation.getCurrentUser.getShortUserName
-
-
   def iterator: Iterator[T] = values.iterator
 
   override def hashCode(): Int = (41 * (41 + rddId) + slice).toInt
@@ -54,7 +51,7 @@ private[spark] class ParallelCollectionPartition[T: ClassTag](
 
   @throws(classOf[IOException])
   private def writeObject(out: ObjectOutputStream): Unit = Utils.tryOrIOException {
-
+    val user = Utils.getCurrentUserName
     val sfactory = SparkEnv.get(user).serializer
 
     // Treat java serializer with default action rather than going thru serialization, to avoid a
@@ -73,7 +70,7 @@ private[spark] class ParallelCollectionPartition[T: ClassTag](
 
   @throws(classOf[IOException])
   private def readObject(in: ObjectInputStream): Unit = Utils.tryOrIOException {
-
+    val user = Utils.getCurrentUserName()
     val sfactory = SparkEnv.get(user).serializer
     sfactory match {
       case js: JavaSerializer => in.defaultReadObject()

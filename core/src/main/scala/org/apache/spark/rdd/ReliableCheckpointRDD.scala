@@ -23,7 +23,6 @@ import scala.reflect.ClassTag
 import scala.util.control.NonFatal
 
 import org.apache.hadoop.fs.Path
-import org.apache.hadoop.security.UserGroupInformation
 
 import org.apache.spark._
 import org.apache.spark.broadcast.Broadcast
@@ -158,7 +157,7 @@ private[spark] object ReliableCheckpointRDD extends Logging {
       path: String,
       broadcastedConf: Broadcast[SerializableConfiguration],
       blockSize: Int = -1)(ctx: TaskContext, iterator: Iterator[T]) {
-    val user = UserGroupInformation.getCurrentUser.getShortUserName
+    val user = Utils.getCurrentUserName
     val env = SparkEnv.get(user)
     val outputDir = new Path(path)
     val fs = outputDir.getFileSystem(broadcastedConf.value.value)
@@ -267,7 +266,7 @@ private[spark] object ReliableCheckpointRDD extends Logging {
       path: Path,
       broadcastedConf: Broadcast[SerializableConfiguration],
       context: TaskContext): Iterator[T] = {
-    val user = UserGroupInformation.getCurrentUser.getShortUserName
+    val user = Utils.getCurrentUserName
     val env = SparkEnv.get(user)
     val fs = path.getFileSystem(broadcastedConf.value.value)
     val bufferSize = env.conf.getInt("spark.buffer.size", 65536)

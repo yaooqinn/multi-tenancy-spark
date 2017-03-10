@@ -24,7 +24,6 @@ import scala.collection.mutable.ArrayBuffer
 import scala.util.control.ControlThrowable
 
 import com.codahale.metrics.{Gauge, MetricRegistry}
-import org.apache.hadoop.security.UserGroupInformation
 
 import org.apache.spark.internal.Logging
 import org.apache.spark.internal.config.{DYN_ALLOCATION_MAX_EXECUTORS, DYN_ALLOCATION_MIN_EXECUTORS}
@@ -89,7 +88,8 @@ private[spark] class ExecutorAllocationManager(
 
   import ExecutorAllocationManager._
 
-  private val user = UserGroupInformation.getCurrentUser.getShortUserName
+  // User for getting the SparkEnv
+  private val user = Utils.getCurrentUserName
 
   // Lower and upper bounds on the number of executors.
   private val minNumExecutors = conf.get(DYN_ALLOCATION_MIN_EXECUTORS)

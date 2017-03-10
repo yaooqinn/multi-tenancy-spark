@@ -113,7 +113,7 @@ class RangePartitioner[K : Ordering : ClassTag, V](
     private var ascending: Boolean = true)
   extends Partitioner {
 
-  @transient private val user = UserGroupInformation.getCurrentUser.getShortUserName
+  private val user = Utils.getCurrentUserName
 
   // We allow partitions = 0, which happens when sorting an empty RDD under the default settings.
   require(partitions >= 0, s"Number of partitions cannot be negative but found $partitions.")

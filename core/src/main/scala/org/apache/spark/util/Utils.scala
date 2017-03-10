@@ -92,7 +92,7 @@ private[spark] object Utils extends Logging {
   val DEFAULT_MAX_TO_STRING_FIELDS = 25
 
   private def maxNumToStringFields = {
-    val user = UserGroupInformation.getCurrentUser.getShortUserName
+    val user = getCurrentUserName
     SparkEnv.get(user).conf.getInt("spark.debug.maxToStringFields", DEFAULT_MAX_TO_STRING_FIELDS)
   }
 
@@ -622,7 +622,7 @@ private[spark] object Utils extends Logging {
       conf: SparkConf,
       securityMgr: SecurityManager,
       hadoopConf: Configuration) {
-    val user = UserGroupInformation.getCurrentUser.getShortUserName
+    val user = getCurrentUserName
     val targetFile = new File(targetDir, filename)
     val uri = new URI(url)
     val fileOverwrite = conf.getBoolean("spark.files.overwrite", defaultValue = false)

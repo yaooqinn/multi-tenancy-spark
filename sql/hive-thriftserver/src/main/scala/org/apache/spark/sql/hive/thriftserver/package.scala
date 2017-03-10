@@ -38,8 +38,9 @@ package object config {
 
   private[hive] val PROXY_USERS =
     ConfigBuilder("spark.sql.proxy.users")
-      .doc(s"comma separated string for users for Spark Thrift Server to initializing " +
-        s"SparkContext.")
+      .doc(s"Comma separated string of user names for Spark Thrift Server to initializing " +
+        s"different SparkContext. These users must have rights to impersonate the real user" +
+        s"who start the driver side jvm.")
       .stringConf
       .toSequence
       .createWithDefault(Nil)

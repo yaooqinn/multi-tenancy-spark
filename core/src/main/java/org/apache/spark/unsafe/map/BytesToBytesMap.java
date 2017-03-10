@@ -230,18 +230,19 @@ public final class BytesToBytesMap extends MemoryConsumer {
       0.5,
       pageSizeBytes,
       enablePerfMetrics);
+
     String user = null;
     try {
       user = UserGroupInformation.getCurrentUser().getShortUserName();
+      logger.debug("UserGroupInformation debug info: Using user {}", user);
     } catch (IOException e) {
       Platform.throwException(e);
     }
     SparkEnv sparkEnv = SparkEnv.get(user);
     if (sparkEnv != null ) {
-      this.blockManager = SparkEnv.get(user).blockManager();
-      this.serializerManager = SparkEnv.get(user).serializerManager();
+      this.blockManager = sparkEnv.blockManager();
+      this.serializerManager = sparkEnv.serializerManager();
     }
-
   }
 
   /**

@@ -22,12 +22,11 @@ import java.io.{ByteArrayInputStream, ByteArrayOutputStream}
 import scala.collection.mutable.{Map, Set, Stack}
 import scala.language.existentials
 
-import org.apache.hadoop.security.UserGroupInformation
-import org.apache.xbean.asm5.{ClassReader, ClassVisitor, MethodVisitor, Type}
 import org.apache.xbean.asm5.Opcodes._
+import org.apache.xbean.asm5.{ClassReader, ClassVisitor, MethodVisitor, Type}
 
-import org.apache.spark.{SparkEnv, SparkException}
 import org.apache.spark.internal.Logging
+import org.apache.spark.{SparkEnv, SparkException}
 
 /**
  * A cleaner that renders closures serializable if they can be done so safely.
@@ -292,7 +291,7 @@ private[spark] object ClosureCleaner extends Logging {
 
   private def ensureSerializable(func: AnyRef) {
     try {
-      val user = UserGroupInformation.getCurrentUser.getShortUserName
+      val user = Utils.getCurrentUserName
       if (SparkEnv.get(user) != null) {
         SparkEnv.get(user).closureSerializer.newInstance().serialize(func)
       }

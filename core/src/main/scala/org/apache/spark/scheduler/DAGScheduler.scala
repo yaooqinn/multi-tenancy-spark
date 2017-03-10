@@ -30,7 +30,6 @@ import scala.language.{existentials, postfixOps}
 import scala.util.control.NonFatal
 
 import org.apache.commons.lang3.SerializationUtils
-import org.apache.hadoop.security.UserGroupInformation
 
 import org.apache.spark._
 import org.apache.spark.broadcast.Broadcast
@@ -40,8 +39,8 @@ import org.apache.spark.network.util.JavaUtils
 import org.apache.spark.partial.{ApproximateActionListener, ApproximateEvaluator, PartialResult}
 import org.apache.spark.rdd.RDD
 import org.apache.spark.rpc.RpcTimeout
-import org.apache.spark.storage._
 import org.apache.spark.storage.BlockManagerMessages.BlockManagerHeartbeat
+import org.apache.spark.storage._
 import org.apache.spark.util._
 
 /**
@@ -132,9 +131,6 @@ class DAGScheduler(
   }
 
   def this(sc: SparkContext) = this(sc, sc.taskScheduler)
-
-
-  val isSecurityEnabled: Boolean = UserGroupInformation.isSecurityEnabled
 
   private[spark] val metricsSource: DAGSchedulerSource = new DAGSchedulerSource(this)
 

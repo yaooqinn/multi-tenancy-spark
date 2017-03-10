@@ -146,7 +146,13 @@ class SparkContext(config: SparkConf, user: Option[String]) extends Logging {
       jars: Seq[String] = Nil,
       environment: Map[String, String] = Map()) = {
     this(
-      SparkContext.updatedConf(new SparkConf(), master, appName, sparkHome, jars, environment),
+      SparkContext.updatedConf(
+        new SparkConf(),
+        master,
+        appName,
+        sparkHome,
+        jars,
+        environment),
       None)
   }
 
@@ -234,8 +240,6 @@ class SparkContext(config: SparkConf, user: Option[String]) extends Logging {
    */
   def getConf: SparkConf = conf.clone()
 
-  def getUser: Option[String] = user
-
   def jars: Seq[String] = _jars
   def files: Seq[String] = _files
   def master: String = _conf.get("spark.master")
@@ -261,8 +265,7 @@ class SparkContext(config: SparkConf, user: Option[String]) extends Logging {
       conf: SparkConf,
       isLocal: Boolean,
       listenerBus: LiveListenerBus): SparkEnv = {
-    SparkEnv.createDriverEnv(
-      conf, isLocal, listenerBus, SparkContext.numDriverCores(master), None)
+    SparkEnv.createDriverEnv(conf, isLocal, listenerBus, SparkContext.numDriverCores(master))
   }
 
   private[spark] def env: SparkEnv = _env
@@ -1416,7 +1419,7 @@ class SparkContext(config: SparkConf, user: Option[String]) extends Logging {
     assertNotStopped()
     require(!classOf[RDD[_]].isAssignableFrom(classTag[T].runtimeClass),
       "Can not directly broadcast RDDs; instead, call collect() and broadcast the result.")
-    val bc = env.broadcastManager.newBroadcast[T](value, isLocal, user)
+    val bc = env.broadcastManager.newBroadcast[T](value, isLocal)
     val callSite = getCallSite
     logInfo("Created broadcast " + bc.id + " from " + callSite.shortForm)
     cleaner.foreach(_.registerBroadcastForCleanup(bc))
@@ -2099,7 +2102,7 @@ class SparkContext(config: SparkConf, user: Option[String]) extends Logging {
    *   serializable
    */
   private[spark] def clean[F <: AnyRef](f: F, checkSerializable: Boolean = true): F = {
-    ClosureCleaner.clean(f, checkSerializable, true)
+    ClosureCleaner.clean(f, checkSerializable)
     f
   }
 
@@ -2318,7 +2321,7 @@ object SparkContext extends Logging {
     // from assertNoOtherContextIsRunning within setActiveContext
     SPARK_CONTEXT_CONSTRUCTOR_LOCK.synchronized {
       if (activeContext.get() == null) {
-        setActiveContext(new SparkContext(config, None), allowMultipleContexts = false)
+        setActiveContext(new SparkContext(config), allowMultipleContexts = false)
       } else {
         if (config.getAll.nonEmpty) {
           logWarning("Using an existing SparkContext; some configuration may not take effect.")

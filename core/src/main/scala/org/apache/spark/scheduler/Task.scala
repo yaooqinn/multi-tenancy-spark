@@ -24,8 +24,6 @@ import java.util.Properties
 import scala.collection.mutable
 import scala.collection.mutable.HashMap
 
-import org.apache.hadoop.security.UserGroupInformation
-
 import org.apache.spark._
 import org.apache.spark.executor.TaskMetrics
 import org.apache.spark.memory.{MemoryMode, TaskMemoryManager}
@@ -77,7 +75,7 @@ private[spark] abstract class Task[T](
       taskAttemptId: Long,
       attemptNumber: Int,
       metricsSystem: MetricsSystem): T = {
-    val user = UserGroupInformation.getCurrentUser.getShortUserName
+    val user = Utils.getCurrentUserName
     val env = SparkEnv.get(user)
     env.blockManager.registerTask(taskAttemptId)
     context = new TaskContextImpl(

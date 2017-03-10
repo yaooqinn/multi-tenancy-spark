@@ -25,7 +25,6 @@ import scala.collection.mutable
 import scala.util.Properties
 
 import com.google.common.collect.MapMaker
-import org.apache.hadoop.security.UserGroupInformation
 
 import org.apache.spark.annotation.DeveloperApi
 import org.apache.spark.api.python.PythonWorkerFactory
@@ -36,8 +35,8 @@ import org.apache.spark.memory.{MemoryManager, StaticMemoryManager, UnifiedMemor
 import org.apache.spark.metrics.MetricsSystem
 import org.apache.spark.network.netty.NettyBlockTransferService
 import org.apache.spark.rpc.{RpcEndpoint, RpcEndpointRef, RpcEnv}
-import org.apache.spark.scheduler.{LiveListenerBus, OutputCommitCoordinator}
 import org.apache.spark.scheduler.OutputCommitCoordinator.OutputCommitCoordinatorEndpoint
+import org.apache.spark.scheduler.{LiveListenerBus, OutputCommitCoordinator}
 import org.apache.spark.security.CryptoStreamUtils
 import org.apache.spark.serializer.{JavaSerializer, Serializer, SerializerManager}
 import org.apache.spark.shuffle.ShuffleManager
@@ -142,17 +141,23 @@ object SparkEnv extends Logging {
   private[spark] val driverSystemName = "sparkDriver"
   private[spark] val executorSystemName = "sparkExecutor"
 
-  def set(user: String, e: SparkEnv) {
-    if (e == null) {
+  /**
+   * Set the spark environment or remove it if `env` is null
+   * @param user The SPARK_USER who runs a SparkContext
+   * @param env Driver side or executor side environment
+   */
+  def set(user: String, env: SparkEnv) {
+    if (env == null) {
       envs.remove(user)
     } else {
-      envs.put(user, e)
+      envs.put(user, env)
     }
-
   }
 
   /**
-   * Returns the SparkEnv.
+   * Returns the SparkEnv by a specified user
+   * @param user The SPARK_USER who runs a SparkContext
+   * @return SparkEnv
    */
   def get(user: String): SparkEnv = {
     envs.get(user)
@@ -204,7 +209,7 @@ object SparkEnv extends Logging {
       numCores: Int,
       ioEncryptionKey: Option[Array[Byte]],
       isLocal: Boolean): SparkEnv = {
-    val user = UserGroupInformation.getCurrentUser.getShortUserName
+    val user = Utils.getCurrentUserName
     val env = create(
       conf,
       executorId,
