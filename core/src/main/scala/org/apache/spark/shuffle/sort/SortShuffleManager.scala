@@ -19,6 +19,8 @@ package org.apache.spark.shuffle.sort
 
 import java.util.concurrent.ConcurrentHashMap
 
+import org.apache.hadoop.security.UserGroupInformation
+
 import org.apache.spark._
 import org.apache.spark.internal.Logging
 import org.apache.spark.shuffle._
@@ -88,7 +90,7 @@ private[spark] class SortShuffleManager(conf: SparkConf) extends ShuffleManager 
       shuffleId: Int,
       numMaps: Int,
       dependency: ShuffleDependency[K, V, C]): ShuffleHandle = {
-    if (SortShuffleWriter.shouldBypassMergeSort(SparkEnv.get.conf, dependency)) {
+    if (SortShuffleWriter.shouldBypassMergeSort(conf, dependency)) {
       // If there are fewer than spark.shuffle.sort.bypassMergeThreshold partitions and we don't
       // need map-side aggregation, then write numPartitions files directly and just concatenate
       // them at the end. This avoids doing serialization and deserialization twice to merge
@@ -126,7 +128,8 @@ private[spark] class SortShuffleManager(conf: SparkConf) extends ShuffleManager 
       context: TaskContext): ShuffleWriter[K, V] = {
     numMapsForShuffle.putIfAbsent(
       handle.shuffleId, handle.asInstanceOf[BaseShuffleHandle[_, _, _]].numMaps)
-    val env = SparkEnv.get
+    val user = UserGroupInformation.getCurrentUser.getShortUserName
+    val env = SparkEnv.get(user)
     handle match {
       case unsafeShuffleHandle: SerializedShuffleHandle[K @unchecked, V @unchecked] =>
         new UnsafeShuffleWriter(

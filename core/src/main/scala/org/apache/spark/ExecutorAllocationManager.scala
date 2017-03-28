@@ -88,6 +88,9 @@ private[spark] class ExecutorAllocationManager(
 
   import ExecutorAllocationManager._
 
+  // User for getting the SparkEnv
+  private val user = Utils.getCurrentUserName
+
   // Lower and upper bounds on the number of executors.
   private val minNumExecutors = conf.get(DYN_ALLOCATION_MIN_EXECUTORS)
   private val maxNumExecutors = conf.get(DYN_ALLOCATION_MAX_EXECUTORS)
@@ -542,7 +545,7 @@ private[spark] class ExecutorAllocationManager(
         // Note that it is not necessary to query the executors since all the cached
         // blocks we are concerned with are reported to the driver. Note that this
         // does not include broadcast blocks.
-        val hasCachedBlocks = SparkEnv.get.blockManager.master.hasCachedBlocks(executorId)
+        val hasCachedBlocks = SparkEnv.get(user).blockManager.master.hasCachedBlocks(executorId)
         val now = clock.getTimeMillis()
         val timeout = {
           if (hasCachedBlocks) {

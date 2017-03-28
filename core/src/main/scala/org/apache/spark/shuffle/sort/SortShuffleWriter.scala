@@ -32,9 +32,11 @@ private[spark] class SortShuffleWriter[K, V, C](
     context: TaskContext)
   extends ShuffleWriter[K, V] with Logging {
 
+  private val user = Utils.getCurrentUserName
+
   private val dep = handle.dependency
 
-  private val blockManager = SparkEnv.get.blockManager
+  private val blockManager = SparkEnv.get(user).blockManager
 
   private var sorter: ExternalSorter[K, V, _] = null
 

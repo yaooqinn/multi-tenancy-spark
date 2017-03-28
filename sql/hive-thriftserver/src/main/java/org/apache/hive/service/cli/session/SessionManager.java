@@ -50,10 +50,10 @@ public class SessionManager extends CompositeService {
 
   private static final Log LOG = LogFactory.getLog(CompositeService.class);
   public static final String HIVERCFILE = ".hiverc";
-  private HiveConf hiveConf;
+  protected HiveConf hiveConf;
   private final Map<SessionHandle, HiveSession> handleToSession =
       new ConcurrentHashMap<SessionHandle, HiveSession>();
-  private final OperationManager operationManager = new OperationManager();
+  protected OperationManager operationManager = new OperationManager();
   private ThreadPoolExecutor backgroundOperationPool;
   private boolean isOperationLogEnabled;
   private File operationLogRootDir;
@@ -83,7 +83,7 @@ public class SessionManager extends CompositeService {
     super.init(hiveConf);
   }
 
-  private void createBackgroundOperationPool() {
+  protected void createBackgroundOperationPool() {
     int poolSize = hiveConf.getIntVar(ConfVars.HIVE_SERVER2_ASYNC_EXEC_THREADS);
     LOG.info("HiveServer2: Background operation thread pool size: " + poolSize);
     int poolQueueSize = hiveConf.getIntVar(ConfVars.HIVE_SERVER2_ASYNC_EXEC_WAIT_QUEUE_SIZE);
@@ -212,11 +212,6 @@ public class SessionManager extends CompositeService {
             .getAbsolutePath(), e);
       }
     }
-  }
-
-  public SessionHandle openSession(TProtocolVersion protocol, String username, String password, String ipAddress,
-      Map<String, String> sessionConf) throws HiveSQLException {
-    return openSession(protocol, username, password, ipAddress, sessionConf, false, null);
   }
 
   /**

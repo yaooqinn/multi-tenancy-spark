@@ -157,7 +157,8 @@ private[spark] object ReliableCheckpointRDD extends Logging {
       path: String,
       broadcastedConf: Broadcast[SerializableConfiguration],
       blockSize: Int = -1)(ctx: TaskContext, iterator: Iterator[T]) {
-    val env = SparkEnv.get
+    val user = Utils.getCurrentUserName
+    val env = SparkEnv.get(user)
     val outputDir = new Path(path)
     val fs = outputDir.getFileSystem(broadcastedConf.value.value)
 
@@ -210,7 +211,7 @@ private[spark] object ReliableCheckpointRDD extends Logging {
       val bufferSize = sc.conf.getInt("spark.buffer.size", 65536)
       val fs = partitionerFilePath.getFileSystem(sc.hadoopConfiguration)
       val fileOutputStream = fs.create(partitionerFilePath, false, bufferSize)
-      val serializer = SparkEnv.get.serializer.newInstance()
+      val serializer = SparkEnv.get(sc.sparkUser).serializer.newInstance()
       val serializeStream = serializer.serializeStream(fileOutputStream)
       Utils.tryWithSafeFinally {
         serializeStream.writeObject(partitioner)
@@ -238,7 +239,7 @@ private[spark] object ReliableCheckpointRDD extends Logging {
       val partitionerFilePath = new Path(checkpointDirPath, checkpointPartitionerFileName)
       val fs = partitionerFilePath.getFileSystem(sc.hadoopConfiguration)
       val fileInputStream = fs.open(partitionerFilePath, bufferSize)
-      val serializer = SparkEnv.get.serializer.newInstance()
+      val serializer = SparkEnv.get(sc.sparkUser).serializer.newInstance()
       val deserializeStream = serializer.deserializeStream(fileInputStream)
       val partitioner = Utils.tryWithSafeFinally[Partitioner] {
         deserializeStream.readObject[Partitioner]
@@ -265,7 +266,8 @@ private[spark] object ReliableCheckpointRDD extends Logging {
       path: Path,
       broadcastedConf: Broadcast[SerializableConfiguration],
       context: TaskContext): Iterator[T] = {
-    val env = SparkEnv.get
+    val user = Utils.getCurrentUserName
+    val env = SparkEnv.get(user)
     val fs = path.getFileSystem(broadcastedConf.value.value)
     val bufferSize = env.conf.getInt("spark.buffer.size", 65536)
     val fileInputStream = fs.open(path, bufferSize)

@@ -31,14 +31,7 @@ import org.apache.hadoop.hive.metastore.api.FieldSchema;
 import org.apache.hadoop.hive.metastore.api.Schema;
 import org.apache.hadoop.hive.ql.session.OperationLog;
 import org.apache.hive.service.AbstractService;
-import org.apache.hive.service.cli.FetchOrientation;
-import org.apache.hive.service.cli.HiveSQLException;
-import org.apache.hive.service.cli.OperationHandle;
-import org.apache.hive.service.cli.OperationState;
-import org.apache.hive.service.cli.OperationStatus;
-import org.apache.hive.service.cli.RowSet;
-import org.apache.hive.service.cli.RowSetFactory;
-import org.apache.hive.service.cli.TableSchema;
+import org.apache.hive.service.cli.*;
 import org.apache.hive.service.cli.session.HiveSession;
 import org.apache.log4j.Appender;
 import org.apache.log4j.Logger;
@@ -50,7 +43,7 @@ import org.apache.log4j.Logger;
 public class OperationManager extends AbstractService {
   private final Log LOG = LogFactory.getLog(OperationManager.class.getName());
 
-  private final Map<OperationHandle, Operation> handleToOperation =
+  protected final Map<OperationHandle, Operation> handleToOperation =
       new HashMap<OperationHandle, Operation>();
 
   public OperationManager() {

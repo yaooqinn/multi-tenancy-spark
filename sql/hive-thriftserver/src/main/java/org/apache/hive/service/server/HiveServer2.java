@@ -20,12 +20,7 @@ package org.apache.hive.service.server;
 
 import java.util.Properties;
 
-import org.apache.commons.cli.GnuParser;
-import org.apache.commons.cli.HelpFormatter;
-import org.apache.commons.cli.Option;
-import org.apache.commons.cli.OptionBuilder;
-import org.apache.commons.cli.Options;
-import org.apache.commons.cli.ParseException;
+import org.apache.commons.cli.*;
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
 import org.apache.hadoop.hive.common.LogUtils;
@@ -46,8 +41,8 @@ import org.apache.hive.service.cli.thrift.ThriftHttpCLIService;
 public class HiveServer2 extends CompositeService {
   private static final Log LOG = LogFactory.getLog(HiveServer2.class);
 
-  private CLIService cliService;
-  private ThriftCLIService thriftCLIService;
+  protected CLIService cliService;
+  protected ThriftCLIService thriftCLIService;
 
   public HiveServer2() {
     super(HiveServer2.class.getSimpleName());

@@ -26,8 +26,7 @@ import scala.annotation.tailrec
 import scala.collection.Map
 import scala.collection.mutable.{HashMap, HashSet, Stack}
 import scala.concurrent.duration._
-import scala.language.existentials
-import scala.language.postfixOps
+import scala.language.{existentials, postfixOps}
 import scala.util.control.NonFatal
 
 import org.apache.commons.lang3.SerializationUtils
@@ -40,8 +39,8 @@ import org.apache.spark.network.util.JavaUtils
 import org.apache.spark.partial.{ApproximateActionListener, ApproximateEvaluator, PartialResult}
 import org.apache.spark.rdd.RDD
 import org.apache.spark.rpc.RpcTimeout
-import org.apache.spark.storage._
 import org.apache.spark.storage.BlockManagerMessages.BlockManagerHeartbeat
+import org.apache.spark.storage._
 import org.apache.spark.util._
 
 /**
@@ -182,7 +181,7 @@ class DAGScheduler(
 
   // A closure serializer that we reuse.
   // This is only safe because DAGScheduler runs in a single thread.
-  private val closureSerializer = SparkEnv.get.closureSerializer.newInstance()
+  private val closureSerializer = SparkEnv.get(sc.sparkUser).closureSerializer.newInstance()
 
   /** If enabled, FetchFailed will not cause stage retry, in order to surface the problem. */
   private val disallowStageRetryForTest = sc.getConf.getBoolean("spark.test.noStageRetry", false)

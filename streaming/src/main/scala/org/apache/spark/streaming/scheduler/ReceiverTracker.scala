@@ -24,6 +24,8 @@ import scala.concurrent.ExecutionContext
 import scala.language.existentials
 import scala.util.{Failure, Success}
 
+import org.apache.hadoop.security.UserGroupInformation
+
 import org.apache.spark._
 import org.apache.spark.internal.Logging
 import org.apache.spark.rdd.RDD
@@ -593,7 +595,8 @@ class ReceiverTracker(ssc: StreamingContext, skipReceiverLaunch: Boolean = false
         new SerializableConfiguration(ssc.sparkContext.hadoopConfiguration)
 
       // Function to start the receiver on the worker node
-      val startReceiverFunc: Iterator[Receiver[_]] => Unit =
+      val startReceiverFunc: Iterator[Receiver[_]] => Unit = {
+        val user = UserGroupInformation.getCurrentUser.getShortUserName
         (iterator: Iterator[Receiver[_]]) => {
           if (!iterator.hasNext) {
             throw new SparkException(
@@ -603,13 +606,17 @@ class ReceiverTracker(ssc: StreamingContext, skipReceiverLaunch: Boolean = false
             val receiver = iterator.next()
             assert(iterator.hasNext == false)
             val supervisor = new ReceiverSupervisorImpl(
-              receiver, SparkEnv.get, serializableHadoopConf.value, checkpointDirOption)
+              receiver,
+              SparkEnv.get(user),
+              serializableHadoopConf.value,
+              checkpointDirOption)
             supervisor.start()
             supervisor.awaitTermination()
           } else {
             // It's restarted by TaskScheduler, but we want to reschedule it again. So exit it.
           }
         }
+      }
 
       // Create the RDD using the scheduledLocations to run the receiver in a Spark job
       val receiverRDD: RDD[Receiver[_]] =

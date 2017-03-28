@@ -114,8 +114,8 @@ class WriteAheadLogBackedBlockRDD[T: ClassTag](
   override def compute(split: Partition, context: TaskContext): Iterator[T] = {
     assertValid()
     val hadoopConf = broadcastedHadoopConf.value
-    val blockManager = SparkEnv.get.blockManager
-    val serializerManager = SparkEnv.get.serializerManager
+    val blockManager = SparkEnv.get(sc.sparkUser).blockManager
+    val serializerManager = SparkEnv.get(sc.sparkUser).serializerManager
     val partition = split.asInstanceOf[WriteAheadLogBackedBlockRDDPartition]
     val blockId = partition.blockId
 
@@ -138,7 +138,7 @@ class WriteAheadLogBackedBlockRDD[T: ClassTag](
         val nonExistentDirectory = new File(
           System.getProperty("java.io.tmpdir"), UUID.randomUUID().toString).getAbsolutePath
         writeAheadLog = WriteAheadLogUtils.createLogForReceiver(
-          SparkEnv.get.conf, nonExistentDirectory, hadoopConf)
+          SparkEnv.get(sc.sparkUser).conf, nonExistentDirectory, hadoopConf)
         dataRead = writeAheadLog.read(partition.walRecordHandle)
       } catch {
         case NonFatal(e) =>

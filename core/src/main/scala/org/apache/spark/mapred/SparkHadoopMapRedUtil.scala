@@ -21,12 +21,15 @@ import java.io.IOException
 
 import org.apache.hadoop.mapreduce.{TaskAttemptContext => MapReduceTaskAttemptContext}
 import org.apache.hadoop.mapreduce.{OutputCommitter => MapReduceOutputCommitter}
+import org.apache.hadoop.security.UserGroupInformation
 
 import org.apache.spark.{SparkEnv, TaskContext}
 import org.apache.spark.executor.CommitDeniedException
 import org.apache.spark.internal.Logging
 
 object SparkHadoopMapRedUtil extends Logging {
+
+  private val user = UserGroupInformation.getCurrentUser.getShortUserName
   /**
    * Commits a task output.  Before committing the task output, we need to know whether some other
    * task attempt might be racing to commit the same output partition. Therefore, coordinate with
@@ -60,7 +63,7 @@ object SparkHadoopMapRedUtil extends Logging {
     // First, check whether the task's output has already been committed by some other attempt
     if (committer.needsTaskCommit(mrTaskContext)) {
       val shouldCoordinateWithDriver: Boolean = {
-        val sparkConf = SparkEnv.get.conf
+        val sparkConf = SparkEnv.get(user).conf
         // We only need to coordinate with the driver if there are concurrent task attempts.
         // Note that this could happen even when speculation is not enabled (e.g. see SPARK-8029).
         // This (undocumented) setting is an escape-hatch in case the commit code introduces bugs.
@@ -68,7 +71,7 @@ object SparkHadoopMapRedUtil extends Logging {
       }
 
       if (shouldCoordinateWithDriver) {
-        val outputCommitCoordinator = SparkEnv.get.outputCommitCoordinator
+        val outputCommitCoordinator = SparkEnv.get(user).outputCommitCoordinator
         val taskAttemptNumber = TaskContext.get().attemptNumber()
         val canCommit = outputCommitCoordinator.canCommit(jobId, splitId, taskAttemptNumber)
 

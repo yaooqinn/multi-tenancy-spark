@@ -36,6 +36,7 @@ import org.apache.hadoop.mapred.TaskAttemptID
 import org.apache.hadoop.mapred.TaskID
 import org.apache.hadoop.mapred.lib.CombineFileSplit
 import org.apache.hadoop.mapreduce.TaskType
+import org.apache.hadoop.security.UserGroupInformation
 import org.apache.hadoop.util.ReflectionUtils
 
 import org.apache.spark._
@@ -366,16 +367,20 @@ private[spark] object HadoopRDD extends Logging {
   /** Update the input bytes read metric each time this number of records has been read */
   val RECORDS_BETWEEN_BYTES_READ_METRIC_UPDATES = 256
 
+  private val user = Utils.getCurrentUserName
+
   /**
    * The three methods below are helpers for accessing the local map, a property of the SparkEnv of
    * the local process.
    */
-  def getCachedMetadata(key: String): Any = SparkEnv.get.hadoopJobMetadata.get(key)
+  def getCachedMetadata(key: String): Any =
+    SparkEnv.get(user).hadoopJobMetadata.get(key)
 
-  def containsCachedMetadata(key: String): Boolean = SparkEnv.get.hadoopJobMetadata.containsKey(key)
+  def containsCachedMetadata(key: String): Boolean =
+    SparkEnv.get(user).hadoopJobMetadata.containsKey(key)
 
   private def putCachedMetadata(key: String, value: Any): Unit =
-    SparkEnv.get.hadoopJobMetadata.put(key, value)
+    SparkEnv.get(user).hadoopJobMetadata.put(key, value)
 
   /** Add Hadoop configuration specific to a single partition and attempt. */
   def addLocalConfiguration(jobTrackerId: String, jobId: Int, splitId: Int, attemptId: Int,

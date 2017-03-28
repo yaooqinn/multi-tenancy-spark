@@ -18,16 +18,6 @@
 
 package org.apache.hive.service.cli;
 
-import java.io.IOException;
-import java.util.List;
-import java.util.Map;
-import java.util.concurrent.CancellationException;
-import java.util.concurrent.ExecutionException;
-import java.util.concurrent.TimeUnit;
-import java.util.concurrent.TimeoutException;
-
-import javax.security.auth.login.LoginException;
-
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
 import org.apache.hadoop.hive.conf.HiveConf;
@@ -49,6 +39,15 @@ import org.apache.hive.service.cli.session.SessionManager;
 import org.apache.hive.service.cli.thrift.TProtocolVersion;
 import org.apache.hive.service.server.HiveServer2;
 
+import javax.security.auth.login.LoginException;
+import java.io.IOException;
+import java.util.List;
+import java.util.Map;
+import java.util.concurrent.CancellationException;
+import java.util.concurrent.ExecutionException;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.TimeoutException;
+
 /**
  * CLIService.
  *
@@ -64,9 +63,9 @@ public class CLIService extends CompositeService implements ICLIService {
 
   private final Log LOG = LogFactory.getLog(CLIService.class.getName());
 
-  private HiveConf hiveConf;
-  private SessionManager sessionManager;
-  private UserGroupInformation serviceUGI;
+  protected HiveConf hiveConf;
+  protected SessionManager sessionManager;
+  protected UserGroupInformation serviceUGI;
   private UserGroupInformation httpUGI;
   // The HiveServer2 instance running this service
   private final HiveServer2 hiveServer2;

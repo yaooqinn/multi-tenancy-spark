@@ -354,7 +354,7 @@ private[spark] abstract class MockBackend(
     reviveThread.shutdown()
   }
 
-  val env = SparkEnv.get
+  val env = SparkEnv.get(taskScheduler.sc.sparkUser)
 
   /** Accessed by both scheduling and backend thread, so should be protected by this. */
   var freeCores: Int = _

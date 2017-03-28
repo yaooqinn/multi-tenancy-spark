@@ -69,8 +69,9 @@ import org.apache.spark.util._
  *
  * @param config a Spark Config object describing the application configuration. Any settings in
  *   this config overrides the default configs as well as system properties.
+ * @param user a user who owns this instance of [[SparkContext]]
  */
-class SparkContext(config: SparkConf) extends Logging {
+class SparkContext(config: SparkConf, user: Option[String]) extends Logging {
 
   // The call site where this SparkContext was constructed.
   private val creationSite: CallSite = Utils.getCallSite()
@@ -114,7 +115,9 @@ class SparkContext(config: SparkConf) extends Logging {
    * Create a SparkContext that loads settings from system properties (for instance, when
    * launching with ./bin/spark-submit).
    */
-  def this() = this(new SparkConf())
+  def this() = this(new SparkConf(), None)
+
+  def this(conf: SparkConf) = this(conf, None)
 
   /**
    * Alternative constructor that allows setting common Spark properties directly
@@ -124,7 +127,7 @@ class SparkContext(config: SparkConf) extends Logging {
    * @param conf a [[org.apache.spark.SparkConf]] object specifying other Spark parameters
    */
   def this(master: String, appName: String, conf: SparkConf) =
-    this(SparkContext.updatedConf(conf, master, appName))
+    this(SparkContext.updatedConf(conf, master, appName), None)
 
   /**
    * Alternative constructor that allows setting common Spark properties directly
@@ -142,7 +145,15 @@ class SparkContext(config: SparkConf) extends Logging {
       sparkHome: String = null,
       jars: Seq[String] = Nil,
       environment: Map[String, String] = Map()) = {
-    this(SparkContext.updatedConf(new SparkConf(), master, appName, sparkHome, jars, environment))
+    this(
+      SparkContext.updatedConf(
+        new SparkConf(),
+        master,
+        appName,
+        sparkHome,
+        jars,
+        environment),
+      None)
   }
 
   // NOTE: The below constructors could be consolidated using default arguments. Due to
@@ -292,7 +303,7 @@ class SparkContext(config: SparkConf) extends Logging {
   private[spark] val executorEnvs = HashMap[String, String]()
 
   // Set SPARK_USER for user who is running SparkContext.
-  val sparkUser = Utils.getCurrentUserName()
+  val sparkUser = user.getOrElse(Utils.getCurrentUserName())
 
   private[spark] def schedulerBackend: SchedulerBackend = _schedulerBackend
 
@@ -430,7 +441,7 @@ class SparkContext(config: SparkConf) extends Logging {
 
     // Create the Spark execution environment (cache, map output tracker, etc)
     _env = createSparkEnv(_conf, isLocal, listenerBus)
-    SparkEnv.set(_env)
+    SparkEnv.set(sparkUser, _env)
 
     // If running the REPL, register the repl's output dir with the file server.
     _conf.getOption("spark.repl.class.outputDir").foreach { path =>
@@ -1474,7 +1485,7 @@ class SparkContext(config: SparkConf) extends Logging {
       logInfo(s"Added file $path at $key with timestamp $timestamp")
       // Fetch the file locally so that closures which are run on the driver can still use the
       // SparkFiles API to access files.
-      Utils.fetchFile(uri.toString, new File(SparkFiles.getRootDirectory()), conf,
+      Utils.fetchFile(uri.toString, new File(SparkFiles.getRootDirectory), conf,
         env.securityManager, hadoopConfiguration, timestamp, useCache = false)
       postEnvironmentUpdate()
     }
@@ -1841,7 +1852,7 @@ class SparkContext(config: SparkConf) extends Logging {
       Utils.tryLogNonFatalError {
         _env.stop()
       }
-      SparkEnv.set(null)
+      SparkEnv.set(sparkUser, null)
     }
     // Unset YARN mode system env variable, to allow switching between cluster types.
     System.clearProperty("SPARK_YARN_MODE")

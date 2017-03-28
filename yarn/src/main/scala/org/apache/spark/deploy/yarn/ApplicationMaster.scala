@@ -20,7 +20,7 @@ package org.apache.spark.deploy.yarn
 import java.io.{File, IOException}
 import java.lang.reflect.InvocationTargetException
 import java.net.{Socket, URI, URL}
-import java.util.concurrent.{TimeoutException, TimeUnit}
+import java.util.concurrent.{TimeUnit, TimeoutException}
 
 import scala.collection.mutable.HashMap
 import scala.concurrent.Promise
@@ -41,8 +41,8 @@ import org.apache.spark.deploy.yarn.security.{AMCredentialRenewer, ConfigurableC
 import org.apache.spark.internal.Logging
 import org.apache.spark.internal.config._
 import org.apache.spark.rpc._
-import org.apache.spark.scheduler.cluster.{CoarseGrainedSchedulerBackend, YarnSchedulerBackend}
 import org.apache.spark.scheduler.cluster.CoarseGrainedClusterMessages._
+import org.apache.spark.scheduler.cluster.{CoarseGrainedSchedulerBackend, YarnSchedulerBackend}
 import org.apache.spark.util._
 
 /**
@@ -246,7 +246,7 @@ private[spark] class ApplicationMaster(
         // If a principal and keytab have been set, use that to create new credentials for executors
         // periodically
         credentialRenewer =
-          new ConfigurableCredentialManager(sparkConf, yarnConf).credentialRenewer()
+          ConfigurableCredentialManager(sparkConf).credentialRenewer()
         credentialRenewer.scheduleLoginFromKeytab()
       }
 
@@ -761,10 +761,12 @@ object ApplicationMaster extends Logging {
         sys.props(k) = v
       }
     }
+
     SparkHadoopUtil.get.runAsSparkUser { () =>
       master = new ApplicationMaster(amArgs, new YarnRMClient)
       System.exit(master.run())
     }
+
   }
 
   private[spark] def sparkContextInitialized(sc: SparkContext): Unit = {

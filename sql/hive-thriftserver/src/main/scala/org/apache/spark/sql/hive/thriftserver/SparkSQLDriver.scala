@@ -17,8 +17,7 @@
 
 package org.apache.spark.sql.hive.thriftserver
 
-import java.util.{ArrayList => JArrayList, Arrays, List => JList}
-
+import java.util.{Arrays, ArrayList => JArrayList, List => JList}
 import scala.collection.JavaConverters._
 
 import org.apache.commons.lang3.exception.ExceptionUtils
@@ -27,11 +26,11 @@ import org.apache.hadoop.hive.ql.Driver
 import org.apache.hadoop.hive.ql.processors.CommandProcessorResponse
 
 import org.apache.spark.internal.Logging
-import org.apache.spark.sql.{AnalysisException, SQLContext}
+import org.apache.spark.sql.{AnalysisException, SQLContext, SparkSession}
 import org.apache.spark.sql.execution.QueryExecution
 
 
-private[hive] class SparkSQLDriver(val context: SQLContext = SparkSQLEnv.sqlContext)
+private[hive] class SparkSQLDriver(val sparkSession: SparkSession = SparkSQLEnv.sparkSession)
   extends Driver
   with Logging {
 
@@ -58,8 +57,8 @@ private[hive] class SparkSQLDriver(val context: SQLContext = SparkSQLEnv.sqlCont
   override def run(command: String): CommandProcessorResponse = {
     // TODO unify the error code
     try {
-      context.sparkContext.setJobDescription(command)
-      val execution = context.sessionState.executePlan(context.sql(command).logicalPlan)
+      sparkSession.sparkContext.setJobDescription(command)
+      val execution = sparkSession.sessionState.executePlan(sparkSession.sql(command).logicalPlan)
       hiveResponse = execution.hiveResultString()
       tableSchema = getResultSetSchema(execution)
       new CommandProcessorResponse(0)

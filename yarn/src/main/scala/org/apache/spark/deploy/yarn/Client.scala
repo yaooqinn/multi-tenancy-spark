@@ -18,16 +18,16 @@
 package org.apache.spark.deploy.yarn
 
 import java.io.{File, FileOutputStream, IOException, OutputStreamWriter}
-import java.net.{InetAddress, UnknownHostException, URI}
+import java.net.{InetAddress, URI, UnknownHostException}
 import java.nio.ByteBuffer
 import java.nio.charset.StandardCharsets
-import java.util.{Properties, UUID}
 import java.util.zip.{ZipEntry, ZipOutputStream}
+import java.util.{Properties, UUID}
 
 import scala.collection.JavaConverters._
 import scala.collection.mutable.{ArrayBuffer, HashMap, HashSet, ListBuffer, Map}
-import scala.util.{Failure, Success, Try}
 import scala.util.control.NonFatal
+import scala.util.{Failure, Success, Try}
 
 import com.google.common.base.Objects
 import com.google.common.io.Files
@@ -36,10 +36,11 @@ import org.apache.hadoop.fs._
 import org.apache.hadoop.fs.permission.FsPermission
 import org.apache.hadoop.io.DataOutputBuffer
 import org.apache.hadoop.mapreduce.MRJobConfig
+import org.apache.hadoop.security.UserGroupInformation.AuthenticationMethod
 import org.apache.hadoop.security.{Credentials, UserGroupInformation}
 import org.apache.hadoop.util.StringUtils
-import org.apache.hadoop.yarn.api._
 import org.apache.hadoop.yarn.api.ApplicationConstants.Environment
+import org.apache.hadoop.yarn.api._
 import org.apache.hadoop.yarn.api.protocolrecords._
 import org.apache.hadoop.yarn.api.records._
 import org.apache.hadoop.yarn.client.api.{YarnClient, YarnClientApplication}
@@ -47,7 +48,6 @@ import org.apache.hadoop.yarn.conf.YarnConfiguration
 import org.apache.hadoop.yarn.exceptions.ApplicationNotFoundException
 import org.apache.hadoop.yarn.util.Records
 
-import org.apache.spark.{SecurityManager, SparkConf, SparkContext, SparkException}
 import org.apache.spark.deploy.SparkHadoopUtil
 import org.apache.spark.deploy.yarn.config._
 import org.apache.spark.deploy.yarn.security.ConfigurableCredentialManager
@@ -55,6 +55,7 @@ import org.apache.spark.internal.Logging
 import org.apache.spark.internal.config._
 import org.apache.spark.launcher.{LauncherBackend, SparkAppHandle, YarnCommandBuilderUtils}
 import org.apache.spark.util.{CallerContext, Utils}
+import org.apache.spark.{SecurityManager, SparkConf, SparkException}
 
 private[spark] class Client(
     val args: ClientArguments,
@@ -72,6 +73,8 @@ private[spark] class Client(
   private val yarnConf = new YarnConfiguration(hadoopConf)
 
   private val isClusterMode = sparkConf.get("spark.submit.deployMode", "client") == "cluster"
+
+  private var sparkUser: Option[String] = None
 
   // AM related configurations
   private val amMemory = if (isClusterMode) {
@@ -121,7 +124,7 @@ private[spark] class Client(
   private val appStagingBaseDir = sparkConf.get(STAGING_DIR).map { new Path(_) }
     .getOrElse(FileSystem.get(hadoopConf).getHomeDirectory())
 
-  private val credentialManager = new ConfigurableCredentialManager(sparkConf, hadoopConf)
+  private val credentialManager = ConfigurableCredentialManager.getOrCreate(sparkConf)
 
   def reportLauncherState(state: SparkAppHandle.State): Unit = {
     launcherBackend.setState(state)
@@ -141,15 +144,16 @@ private[spark] class Client(
    * creating applications and setting up the application submission context. This was not
    * available in the alpha API.
    */
-  def submitApplication(): ApplicationId = {
+  def submitApplication(user: Option[String] = None): ApplicationId = {
     var appId: ApplicationId = null
     try {
       launcherBackend.connect()
       // Setup the credentials before doing anything else,
       // so we have don't have issues at any point.
-      setupCredentials()
+      setupCredentials(user)
       yarnClient.init(yarnConf)
       yarnClient.start()
+      sparkUser = user
 
       logInfo("Requesting a new application from cluster with %d NodeManagers"
         .format(yarnClient.getYarnClusterMetrics.getNumNodeManagers))
@@ -263,6 +267,7 @@ private[spark] class Client(
           val setResourceRequestMethod =
             appContext.getClass.getMethod("setAMContainerResourceRequest", classOf[ResourceRequest])
           setResourceRequestMethod.invoke(appContext, amRequest)
+          appContext.setAMContainerResourceRequest(amRequest)
         } catch {
           case e: NoSuchMethodException =>
             logWarning(s"Ignoring ${AM_NODE_LABEL_EXPRESSION.key} because the version " +
@@ -395,8 +400,10 @@ private[spark] class Client(
 
     // Merge credentials obtained from registered providers
     val nearestTimeOfNextRenewal = credentialManager.obtainCredentials(hadoopConf, credentials)
-
     if (credentials != null) {
+      // Add credentials to current user's UGI, so that following operations don't need to use the
+      // Kerberos tgt to get delegations again in the client side.
+      UserGroupInformation.getCurrentUser.addCredentials(credentials)
       logDebug(YarnSparkHadoopUtil.get.dumpTokens(credentials).mkString("\n"))
     }
 
@@ -744,6 +751,8 @@ private[spark] class Client(
     confArchive
   }
 
+  private val currentUser = UserGroupInformation.getCurrentUser
+
   /**
    * Set up the environment for launching our ApplicationMaster container.
    */
@@ -755,7 +764,13 @@ private[spark] class Client(
     populateClasspath(args, yarnConf, sparkConf, env, sparkConf.get(DRIVER_CLASS_PATH))
     env("SPARK_YARN_MODE") = "true"
     env("SPARK_YARN_STAGING_DIR") = stagingDirPath.toString
-    env("SPARK_USER") = UserGroupInformation.getCurrentUser().getShortUserName()
+    sparkUser match {
+      case Some(user) =>
+        env("HADOOP_PROXY_USER") = user
+        env("SPARK_USER") = user
+      case _ =>
+        env("SPARK_USER") = currentUser.getShortUserName()
+    }
     if (loginFromKeytab) {
       val credentialsFile = "credentials-" + UUID.randomUUID().toString
       sparkConf.set(CREDENTIALS_FILE_PATH, new Path(stagingDirPath, credentialsFile).toString)
@@ -1017,7 +1032,7 @@ private[spark] class Client(
     amContainer
   }
 
-  def setupCredentials(): Unit = {
+  def setupCredentials(user: Option[String]): Unit = {
     loginFromKeytab = sparkConf.contains(PRINCIPAL.key)
     if (loginFromKeytab) {
       principal = sparkConf.get(PRINCIPAL).get
@@ -1034,7 +1049,9 @@ private[spark] class Client(
       sparkConf.set(PRINCIPAL.key, principal)
     }
     // Defensive copy of the credentials
-    credentials = new Credentials(UserGroupInformation.getCurrentUser.getCredentials)
+    val cred = currentUser.getCredentials
+
+    credentials = new Credentials(cred)
   }
 
   /**

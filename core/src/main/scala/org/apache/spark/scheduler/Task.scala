@@ -75,7 +75,9 @@ private[spark] abstract class Task[T](
       taskAttemptId: Long,
       attemptNumber: Int,
       metricsSystem: MetricsSystem): T = {
-    SparkEnv.get.blockManager.registerTask(taskAttemptId)
+    val user = Utils.getCurrentUserName
+    val env = SparkEnv.get(user)
+    env.blockManager.registerTask(taskAttemptId)
     context = new TaskContextImpl(
       stageId,
       partitionId,
@@ -96,7 +98,7 @@ private[spark] abstract class Task[T](
       Option(taskAttemptId), Option(attemptNumber)).setCurrentContext()
 
     try {
-      runTask(context)
+      runTask(context, user)
     } catch {
       case e: Throwable =>
         // Catch all errors; run task failure callbacks, and rethrow the exception.
@@ -113,13 +115,15 @@ private[spark] abstract class Task[T](
       try {
         Utils.tryLogNonFatalError {
           // Release memory used by this thread for unrolling blocks
-          SparkEnv.get.blockManager.memoryStore.releaseUnrollMemoryForThisTask(MemoryMode.ON_HEAP)
-          SparkEnv.get.blockManager.memoryStore.releaseUnrollMemoryForThisTask(MemoryMode.OFF_HEAP)
+          env.blockManager.memoryStore
+            .releaseUnrollMemoryForThisTask(MemoryMode.ON_HEAP)
+          env.blockManager.memoryStore
+            .releaseUnrollMemoryForThisTask(MemoryMode.OFF_HEAP)
           // Notify any tasks waiting for execution memory to be freed to wake up and try to
           // acquire memory again. This makes impossible the scenario where a task sleeps forever
           // because there are no other tasks left to notify it. Since this is safe to do but may
           // not be strictly necessary, we should revisit whether we can remove this in the future.
-          val memoryManager = SparkEnv.get.memoryManager
+          val memoryManager = SparkEnv.get(user).memoryManager
           memoryManager.synchronized { memoryManager.notifyAll() }
         }
       } finally {
@@ -134,7 +138,7 @@ private[spark] abstract class Task[T](
     this.taskMemoryManager = taskMemoryManager
   }
 
-  def runTask(context: TaskContext): T
+  def runTask(context: TaskContext, user: String): T
 
   def preferredLocations: Seq[TaskLocation] = Nil
 

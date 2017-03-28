@@ -19,6 +19,7 @@ package org.apache.spark
 
 import java.io.File
 import java.net.Socket
+import java.util.concurrent.ConcurrentHashMap
 
 import scala.collection.mutable
 import scala.util.Properties
@@ -34,8 +35,8 @@ import org.apache.spark.memory.{MemoryManager, StaticMemoryManager, UnifiedMemor
 import org.apache.spark.metrics.MetricsSystem
 import org.apache.spark.network.netty.NettyBlockTransferService
 import org.apache.spark.rpc.{RpcEndpoint, RpcEndpointRef, RpcEnv}
-import org.apache.spark.scheduler.{LiveListenerBus, OutputCommitCoordinator}
 import org.apache.spark.scheduler.OutputCommitCoordinator.OutputCommitCoordinatorEndpoint
+import org.apache.spark.scheduler.{LiveListenerBus, OutputCommitCoordinator}
 import org.apache.spark.security.CryptoStreamUtils
 import org.apache.spark.serializer.{JavaSerializer, Serializer, SerializerManager}
 import org.apache.spark.shuffle.ShuffleManager
@@ -135,20 +136,31 @@ class SparkEnv (
 }
 
 object SparkEnv extends Logging {
-  @volatile private var env: SparkEnv = _
+  private val envs = new ConcurrentHashMap[String, SparkEnv]()
 
   private[spark] val driverSystemName = "sparkDriver"
   private[spark] val executorSystemName = "sparkExecutor"
 
-  def set(e: SparkEnv) {
-    env = e
+  /**
+   * Set the spark environment or remove it if `env` is null
+   * @param user The SPARK_USER who runs a SparkContext
+   * @param env Driver side or executor side environment
+   */
+  def set(user: String, env: SparkEnv) {
+    if (env == null) {
+      envs.remove(user)
+    } else {
+      envs.put(user, env)
+    }
   }
 
   /**
-   * Returns the SparkEnv.
+   * Returns the SparkEnv by a specified user
+   * @param user The SPARK_USER who runs a SparkContext
+   * @return SparkEnv
    */
-  def get: SparkEnv = {
-    env
+  def get(user: String): SparkEnv = {
+    envs.get(user)
   }
 
   /**
@@ -197,6 +209,7 @@ object SparkEnv extends Logging {
       numCores: Int,
       ioEncryptionKey: Option[Array[Byte]],
       isLocal: Boolean): SparkEnv = {
+    val user = Utils.getCurrentUserName
     val env = create(
       conf,
       executorId,
@@ -207,7 +220,7 @@ object SparkEnv extends Logging {
       numCores,
       ioEncryptionKey
     )
-    SparkEnv.set(env)
+    SparkEnv.set(user, env)
     env
   }
 

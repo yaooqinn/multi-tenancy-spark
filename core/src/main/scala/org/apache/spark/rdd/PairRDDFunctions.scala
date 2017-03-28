@@ -165,11 +165,13 @@ class PairRDDFunctions[K, V](self: RDD[(K, V)])
   def aggregateByKey[U: ClassTag](zeroValue: U, partitioner: Partitioner)(seqOp: (U, V) => U,
       combOp: (U, U) => U): RDD[(K, U)] = self.withScope {
     // Serialize the zero value to a byte array so that we can get a new clone of it on each key
-    val zeroBuffer = SparkEnv.get.serializer.newInstance().serialize(zeroValue)
+    val zeroBuffer =
+      SparkEnv.get(self.sparkContext.sparkUser).serializer.newInstance().serialize(zeroValue)
     val zeroArray = new Array[Byte](zeroBuffer.limit)
     zeroBuffer.get(zeroArray)
 
-    lazy val cachedSerializer = SparkEnv.get.serializer.newInstance()
+    lazy val cachedSerializer =
+      SparkEnv.get(self.sparkContext.sparkUser).serializer.newInstance()
     val createZero = () => cachedSerializer.deserialize[U](ByteBuffer.wrap(zeroArray))
 
     // We will clean the combiner closure later in `combineByKey`
@@ -215,12 +217,14 @@ class PairRDDFunctions[K, V](self: RDD[(K, V)])
       zeroValue: V,
       partitioner: Partitioner)(func: (V, V) => V): RDD[(K, V)] = self.withScope {
     // Serialize the zero value to a byte array so that we can get a new clone of it on each key
-    val zeroBuffer = SparkEnv.get.serializer.newInstance().serialize(zeroValue)
+    val zeroBuffer =
+      SparkEnv.get(self.sparkContext.sparkUser).serializer.newInstance().serialize(zeroValue)
     val zeroArray = new Array[Byte](zeroBuffer.limit)
     zeroBuffer.get(zeroArray)
 
     // When deserializing, use a lazy val to create just one instance of the serializer per task
-    lazy val cachedSerializer = SparkEnv.get.serializer.newInstance()
+    lazy val cachedSerializer =
+      SparkEnv.get(self.sparkContext.sparkUser).serializer.newInstance()
     val createZero = () => cachedSerializer.deserialize[V](ByteBuffer.wrap(zeroArray))
 
     val cleanedFunc = self.context.clean(func)

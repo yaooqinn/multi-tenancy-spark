@@ -17,6 +17,8 @@
 
 package org.apache.spark.util.collection
 
+import org.apache.hadoop.security.UserGroupInformation
+
 import org.apache.spark.SparkEnv
 import org.apache.spark.internal.Logging
 import org.apache.spark.memory.{MemoryConsumer, MemoryMode, TaskMemoryManager}
@@ -47,15 +49,18 @@ private[spark] abstract class Spillable[C](taskMemoryManager: TaskMemoryManager)
   // It's used for checking spilling frequency
   protected def addElementsRead(): Unit = { _elementsRead += 1 }
 
+  protected val user = UserGroupInformation.getCurrentUser.getShortUserName
+
   // Initial threshold for the size of a collection before we start tracking its memory usage
   // For testing only
   private[this] val initialMemoryThreshold: Long =
-    SparkEnv.get.conf.getLong("spark.shuffle.spill.initialMemoryThreshold", 5 * 1024 * 1024)
+    SparkEnv.get(user).conf.getLong("spark.shuffle.spill.initialMemoryThreshold", 5 * 1024 * 1024)
 
   // Force this collection to spill when there are this many elements in memory
   // For testing only
   private[this] val numElementsForceSpillThreshold: Long =
-    SparkEnv.get.conf.getLong("spark.shuffle.spill.numElementsForceSpillThreshold", Long.MaxValue)
+    SparkEnv.get(user).conf.getLong("spark.shuffle.spill.numElementsForceSpillThreshold",
+      Long.MaxValue)
 
   // Threshold for this collection's size in bytes before we start tracking its memory usage
   // To avoid a large number of small spills, initialize this to a value orders of magnitude > 0

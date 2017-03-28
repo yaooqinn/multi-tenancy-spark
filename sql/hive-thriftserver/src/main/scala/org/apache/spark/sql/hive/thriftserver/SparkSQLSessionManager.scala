@@ -17,8 +17,10 @@
 
 package org.apache.spark.sql.hive.thriftserver
 
-
+import java.util.{Map => JMap}
 import java.util.concurrent.Executors
+
+import scala.collection.JavaConverters._
 
 import org.apache.commons.logging.Log
 import org.apache.hadoop.hive.conf.HiveConf
@@ -28,14 +30,17 @@ import org.apache.hive.service.cli.session.SessionManager
 import org.apache.hive.service.cli.thrift.TProtocolVersion
 import org.apache.hive.service.server.HiveServer2
 
-import org.apache.spark.sql.SQLContext
-import org.apache.spark.sql.hive.{HiveSessionState, HiveUtils}
-import org.apache.spark.sql.hive.thriftserver.ReflectionUtils._
+import org.apache.spark.SparkException
+import org.apache.spark.sql.SparkSession
+import org.apache.spark.sql.hive.HiveUtils
+import org.apache.spark.sql.hive.thriftserver.ReflectionUtils.{getAncestorField, invoke, setSuperField}
 import org.apache.spark.sql.hive.thriftserver.server.SparkSQLOperationManager
 
-private[hive] class SparkSQLSessionManager(hiveServer: HiveServer2, sqlContext: SQLContext)
+private[hive] class SparkSQLSessionManager(hiveServer: HiveServer2)
   extends SessionManager(hiveServer)
   with ReflectedCompositeService {
+
+  private val defaultQueue = MultiSparkSQLEnv.originConf.get("spark.yarn.queue", "default")
 
   private lazy val sparkSqlOperationManager = new SparkSQLOperationManager()
 
@@ -63,7 +68,7 @@ private[hive] class SparkSQLSessionManager(hiveServer: HiveServer2, sqlContext: 
       username: String,
       passwd: String,
       ipAddress: String,
-      sessionConf: java.util.Map[String, String],
+      sessionConf: JMap[String, String],
       withImpersonation: Boolean,
       delegationToken: String): SessionHandle = {
     val sessionHandle =
@@ -72,35 +77,27 @@ private[hive] class SparkSQLSessionManager(hiveServer: HiveServer2, sqlContext: 
     val session = super.getSession(sessionHandle)
     HiveThriftServer2.listener.onSessionCreated(
       session.getIpAddress, sessionHandle.getSessionId.toString, session.getUsername)
-    val sessionState = sqlContext.sessionState.asInstanceOf[HiveSessionState]
-    val ctx = if (sessionState.hiveThriftServerSingleSession) {
-      sqlContext
-    } else {
-      sqlContext.newSession()
-    }
 
-    var rangerUser: String = null
+    val (rangerUser, _, database) = configureSession(sessionConf)
 
-    if (sessionConf != null && sessionConf.containsKey("set:hivevar:ranger.user.name")) {
-      rangerUser = sessionConf.get("set:hivevar:ranger.user.name")
-      val statement = s"set hivevar:ranger.user.name = $rangerUser"
-      ctx.sql(statement)
-    }
-    val metastoreUser = if (rangerUser == null) username else rangerUser
+    val ss = getUserSession(username)
+    val metastoreUser = rangerUser.getOrElse(username)
+
     val client = HiveUtils.newClientForMetadata(
-      sqlContext.sparkContext.conf,
-      sqlContext.sparkContext.hadoopConfiguration,
+      ss.sparkContext.conf,
+      ss.sparkContext.hadoopConfiguration,
       metastoreUser)
 
-    ctx.setConf("spark.sql.hive.version", HiveUtils.hiveExecutionVersion)
-    if (sessionConf != null && sessionConf.containsKey("use:database")) {
-      val statement = s"use ${sessionConf.get("use:database")}"
-      if (rangerUser != null) {
-        client.authorize(statement)
-      }
-      ctx.sql(statement)
+    ss.conf.set("spark.sql.hive.version", HiveUtils.hiveExecutionVersion)
+
+    if (rangerUser.isDefined) {
+      val statement = s"set hivevar:ranger.user.name = ${rangerUser.get}"
+      ss.sql(statement)
+      client.authorize(database.get)
     }
-    sparkSqlOperationManager.sessionToContexts.put(sessionHandle, ctx)
+    ss.sql(database.get)
+
+    sparkSqlOperationManager.sessionToSparkSession.put(sessionHandle, ss)
     sparkSqlOperationManager.sessionToClient.put(sessionHandle, client)
     sessionHandle
   }
@@ -109,7 +106,52 @@ private[hive] class SparkSQLSessionManager(hiveServer: HiveServer2, sqlContext: 
     HiveThriftServer2.listener.onSessionClosed(sessionHandle.getSessionId.toString)
     super.closeSession(sessionHandle)
     sparkSqlOperationManager.sessionToActivePool.remove(sessionHandle)
-    sparkSqlOperationManager.sessionToContexts.remove(sessionHandle)
+    sparkSqlOperationManager.sessionToSparkSession.remove(sessionHandle)
     sparkSqlOperationManager.sessionToClient.remove(sessionHandle)
   }
+
+  /**
+   * Extract ranger.user, spark.yarn.queue and database string from session configuration
+   * @param sessionConf session configuration
+   * @return updated (rangerUser, queue, database) by session configuration
+   */
+  private def configureSession(
+      sessionConf: JMap[String, String]): (Option[String], Option[String], Option[String]) = {
+    var rangerUser: Option[String] = None
+    var queue: Option[String] = Some(defaultQueue)
+    var database: Option[String] = Some("use default")
+    if (sessionConf != null) {
+      sessionConf.asScala.foreach { case ((key, value)) =>
+          if (key == "set:hivevar:ranger.user.name") {
+            rangerUser = Some(value)
+          } else if (key == "use:database") {
+            database = Some("use" + " " + value)
+          } else if (key == "set:hiveconf:mapred.job.queue.name") {
+            queue = Some(value)
+          }
+      }
+    }
+
+    (rangerUser, queue, database)
+  }
+
+  private def getUserSession(user: String): SparkSession = {
+    if (!MultiSparkSQLEnv.userToQueue.containsKey(user)) {
+      throw new SparkException(s"Connecting Spark Thrift Server with User [$user] is forbidden," +
+        s"no resource is prepared for it. Please change to an available user or add [$user] to " +
+        s"the `spark.yarn.proxy.users` on the server side." )
+    }
+    if (!MultiSparkSQLEnv.userToSession.containsKey(user)) {
+      throw new SparkException(s"SparkContext for User [$user] is not initialized please restart" +
+        s" the server.")
+    } else {
+      MultiSparkSQLEnv.userToSession.get(user) match {
+        case ss: SparkSession if (!ss.sparkContext.isStopped) =>
+          ss.newSession()
+        case _ =>
+          throw new SparkException(s"SparkContext stopped for User [$user]")
+      }
+    }
+  }
+
 }

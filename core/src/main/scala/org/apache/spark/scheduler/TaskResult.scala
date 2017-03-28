@@ -43,6 +43,8 @@ private[spark] class DirectTaskResult[T](
   private var valueObjectDeserialized = false
   private var valueObject: T = _
 
+  private val user = Utils.getCurrentUserName
+
   def this() = this(null.asInstanceOf[ByteBuffer], null)
 
   override def writeExternal(out: ObjectOutput): Unit = Utils.tryOrIOException {
@@ -84,7 +86,7 @@ private[spark] class DirectTaskResult[T](
     } else {
       // This should not run when holding a lock because it may cost dozens of seconds for a large
       // value
-      val ser = if (resultSer == null) SparkEnv.get.serializer.newInstance() else resultSer
+      val ser = if (resultSer == null) SparkEnv.get(user).serializer.newInstance() else resultSer
       valueObject = ser.deserialize(valueBytes)
       valueObjectDeserialized = true
       valueObject

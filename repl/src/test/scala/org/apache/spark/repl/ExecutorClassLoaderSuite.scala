@@ -71,7 +71,7 @@ class ExecutorClassLoaderSuite
     try {
       Utils.deleteRecursively(tempDir1)
       Utils.deleteRecursively(tempDir2)
-      SparkEnv.set(null)
+      SparkEnv.set("test", null)
     } finally {
       super.afterAll()
     }

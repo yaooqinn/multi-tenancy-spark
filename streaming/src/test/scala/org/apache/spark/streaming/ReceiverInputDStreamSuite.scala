@@ -48,11 +48,16 @@ class ReceiverInputDStreamSuite extends TestSuiteBase with BeforeAndAfterAll {
   }
 
   testWithoutWAL("createBlockRDD creates correct BlockRDD with block info") { receiverStream =>
-    val blockInfos = Seq.fill(5) { createBlockInfo(withWALInfo = false) }
+    val user = receiverStream.ssc.sparkContext.sparkUser
+
+    val blockInfos = Seq.fill(5) { createBlockInfo(withWALInfo = false, createBlock = true, user) }
     val blockIds = blockInfos.map(_.blockId)
 
     // Verify that there are some blocks that are present, and some that are not
-    require(blockIds.forall(blockId => SparkEnv.get.blockManager.master.contains(blockId)))
+    require(blockIds.forall(blockId => {
+      SparkEnv.get(
+        user).blockManager.master.contains(blockId)
+    }))
 
     val rdd = receiverStream.createBlockRDD(Time(0), blockInfos)
     assert(rdd.isInstanceOf[BlockRDD[_]])
@@ -63,14 +68,20 @@ class ReceiverInputDStreamSuite extends TestSuiteBase with BeforeAndAfterAll {
 
   testWithoutWAL("createBlockRDD filters non-existent blocks before creating BlockRDD") {
     receiverStream =>
-      val presentBlockInfos = Seq.fill(2)(createBlockInfo(withWALInfo = false, createBlock = true))
-      val absentBlockInfos = Seq.fill(3)(createBlockInfo(withWALInfo = false, createBlock = false))
+      val user = receiverStream.ssc.sparkContext.sparkUser
+
+      val presentBlockInfos = Seq.fill(2)(
+        createBlockInfo(withWALInfo = false, createBlock = true, user))
+      val absentBlockInfos = Seq.fill(3)(
+        createBlockInfo(withWALInfo = false, createBlock = false, user))
       val blockInfos = presentBlockInfos ++ absentBlockInfos
       val blockIds = blockInfos.map(_.blockId)
 
       // Verify that there are some blocks that are present, and some that are not
-      require(blockIds.exists(blockId => SparkEnv.get.blockManager.master.contains(blockId)))
-      require(blockIds.exists(blockId => !SparkEnv.get.blockManager.master.contains(blockId)))
+      require(blockIds.exists(blockId => SparkEnv.get(user)
+        .blockManager.master.contains(blockId)))
+      require(blockIds.exists(blockId => !SparkEnv.get(user)
+        .blockManager.master.contains(blockId)))
 
       val rdd = receiverStream.createBlockRDD(Time(0), blockInfos)
       assert(rdd.isInstanceOf[BlockRDD[_]])
@@ -88,7 +99,9 @@ class ReceiverInputDStreamSuite extends TestSuiteBase with BeforeAndAfterAll {
   testWithWAL(
     "createBlockRDD creates correct WALBackedBlockRDD with all block info having WAL info") {
     receiverStream =>
-      val blockInfos = Seq.fill(5) { createBlockInfo(withWALInfo = true) }
+      val user = receiverStream.ssc.sparkContext.sparkUser
+
+      val blockInfos = Seq.fill(5) { createBlockInfo(withWALInfo = true, createBlock = true, user) }
       val blockIds = blockInfos.map(_.blockId)
       val rdd = receiverStream.createBlockRDD(Time(0), blockInfos)
       assert(rdd.isInstanceOf[WriteAheadLogBackedBlockRDD[_]])
@@ -99,8 +112,10 @@ class ReceiverInputDStreamSuite extends TestSuiteBase with BeforeAndAfterAll {
 
   testWithWAL("createBlockRDD creates BlockRDD when some block info don't have WAL info") {
     receiverStream =>
-      val blockInfos1 = Seq.fill(2) { createBlockInfo(withWALInfo = true) }
-      val blockInfos2 = Seq.fill(3) { createBlockInfo(withWALInfo = false) }
+      val user = receiverStream.ssc.sparkContext.sparkUser
+
+      val blockInfos1 = Seq.fill(2) { createBlockInfo(withWALInfo = true, user = user) }
+      val blockInfos2 = Seq.fill(3) { createBlockInfo(withWALInfo = false, user = user) }
       val blockInfos = blockInfos1 ++ blockInfos2
       val blockIds = blockInfos.map(_.blockId)
       val rdd = receiverStream.createBlockRDD(Time(0), blockInfos)
@@ -144,11 +159,13 @@ class ReceiverInputDStreamSuite extends TestSuiteBase with BeforeAndAfterAll {
    */
   private def createBlockInfo(
       withWALInfo: Boolean,
-      createBlock: Boolean = true): ReceivedBlockInfo = {
+      createBlock: Boolean = true,
+      user: String): ReceivedBlockInfo = {
     val blockId = new StreamBlockId(0, Random.nextLong())
     if (createBlock) {
-      SparkEnv.get.blockManager.putSingle(blockId, 1, StorageLevel.MEMORY_ONLY, tellMaster = true)
-      require(SparkEnv.get.blockManager.master.contains(blockId))
+      SparkEnv.get(user).blockManager
+        .putSingle(blockId, 1, StorageLevel.MEMORY_ONLY, tellMaster = true)
+      require(SparkEnv.get(user).blockManager.master.contains(blockId))
     }
     val storeResult = if (withWALInfo) {
       new WriteAheadLogBasedStoreResult(blockId, None, new WriteAheadLogRecordHandle { })

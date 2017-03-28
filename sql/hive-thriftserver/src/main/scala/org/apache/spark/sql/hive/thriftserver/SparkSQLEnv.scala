@@ -19,9 +19,9 @@ package org.apache.spark.sql.hive.thriftserver
 
 import java.io.PrintStream
 
-import org.apache.spark.{SparkConf, SparkContext}
+import org.apache.spark.SparkConf
 import org.apache.spark.internal.Logging
-import org.apache.spark.sql.{SparkSession, SQLContext}
+import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.hive.{HiveSessionState, HiveUtils}
 import org.apache.spark.util.Utils
 
@@ -29,12 +29,15 @@ import org.apache.spark.util.Utils
 private[hive] object SparkSQLEnv extends Logging {
   logDebug("Initializing SparkSQLEnv")
 
-  var sqlContext: SQLContext = _
-  var sparkContext: SparkContext = _
+  var sparkSession: SparkSession = _
+  var originalConf: SparkConf = _
 
   def init() {
-    if (sqlContext == null) {
+    if (sparkSession == null) {
       val sparkConf = new SparkConf(loadDefaults = true)
+            
+      originalConf = sparkConf.clone
+      
       // If user doesn't specify the appName, we want to get [SparkSQL::localHostName] instead of
       // the default appName [SparkSQLCLIDriver] in cli or beeline.
       val maybeAppName = sparkConf
@@ -44,9 +47,7 @@ private[hive] object SparkSQLEnv extends Logging {
       sparkConf
         .setAppName(maybeAppName.getOrElse(s"SparkSQL::${Utils.localHostName()}"))
 
-      val sparkSession = SparkSession.builder.config(sparkConf).enableHiveSupport().getOrCreate()
-      sparkContext = sparkSession.sparkContext
-      sqlContext = sparkSession.sqlContext
+      sparkSession = SparkSession.builder.config(sparkConf).enableHiveSupport().getOrCreate()
 
       val sessionState = sparkSession.sessionState.asInstanceOf[HiveSessionState]
       sessionState.metadataHive.setOut(new PrintStream(System.out, true, "UTF-8"))
@@ -60,10 +61,8 @@ private[hive] object SparkSQLEnv extends Logging {
   def stop() {
     logDebug("Shutting down Spark SQL Environment")
     // Stop the SparkContext
-    if (SparkSQLEnv.sparkContext != null) {
-      sparkContext.stop()
-      sparkContext = null
-      sqlContext = null
+    if (SparkSQLEnv.sparkSession != null) {
+      sparkSession.stop()
     }
   }
 }

@@ -22,6 +22,7 @@ import java.io.{File, PrintStream}
 import scala.collection.JavaConverters._
 import scala.collection.mutable.ArrayBuffer
 import scala.language.reflectiveCalls
+
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.Path
 import org.apache.hadoop.hive.conf.HiveConf
@@ -34,6 +35,9 @@ import org.apache.hadoop.hive.ql.parse.{ParseDriver, ParseUtils, SemanticAnalyze
 import org.apache.hadoop.hive.ql.processors._
 import org.apache.hadoop.hive.ql.session.SessionState
 import org.apache.hadoop.security.UserGroupInformation
+import org.apache.hadoop.security.UserGroupInformation.AuthenticationMethod
+
+import org.apache.spark.deploy.SparkHadoopUtil
 import org.apache.spark.{SparkConf, SparkException}
 import org.apache.spark.internal.Logging
 import org.apache.spark.metrics.source.HiveCatalogMetrics
@@ -110,9 +114,13 @@ private[hive] class HiveClientImpl(
     // instance of SparkConf is needed for the original value of spark.yarn.keytab
     // and spark.yarn.principal set in SparkSubmit, as yarn.Client resets the
     // keytab configuration for the link name in distributed cache
-    if (sparkConf.contains("spark.yarn.principal") && sparkConf.contains("spark.yarn.keytab")) {
-      val principalName = sparkConf.get("spark.yarn.principal")
-      val keytabFileName = sparkConf.get("spark.yarn.keytab")
+    val sconf = new SparkConf(true)
+    val proxy =
+      UserGroupInformation.getCurrentUser.getAuthenticationMethod == AuthenticationMethod.PROXY
+    if (!proxy && sconf.contains("spark.yarn.principal")
+            && sconf.contains("spark.yarn.keytab")) {
+      val principalName = sconf.get("spark.yarn.principal")
+      val keytabFileName = sconf.get("spark.yarn.keytab")
       if (!new File(keytabFileName).exists()) {
         throw new SparkException(s"Keytab file: ${keytabFileName}" +
           " specified in spark.yarn.keytab does not exist")

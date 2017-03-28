@@ -19,14 +19,16 @@ package org.apache.spark.sql.execution.exchange
 
 import java.util.Random
 
+import org.apache.hadoop.security.UserGroupInformation
+
 import org.apache.spark._
 import org.apache.spark.rdd.RDD
 import org.apache.spark.serializer.Serializer
 import org.apache.spark.shuffle.sort.SortShuffleManager
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.errors._
-import org.apache.spark.sql.catalyst.expressions.{Attribute, UnsafeProjection, UnsafeRow}
 import org.apache.spark.sql.catalyst.expressions.codegen.LazilyGeneratedOrdering
+import org.apache.spark.sql.catalyst.expressions.{Attribute, UnsafeProjection}
 import org.apache.spark.sql.catalyst.plans.physical._
 import org.apache.spark.sql.execution._
 import org.apache.spark.sql.execution.metric.SQLMetrics
@@ -156,13 +158,14 @@ object ShuffleExchange {
     // passed instead of directly passing the number of partitions in order to guard against
     // corner-cases where a partitioner constructed with `numPartitions` partitions may output
     // fewer partitions (like RangePartitioner, for example).
-    val conf = SparkEnv.get.conf
-    val shuffleManager = SparkEnv.get.shuffleManager
+    val user = UserGroupInformation.getCurrentUser.getShortUserName
+    val env = SparkEnv.get(user)
+    val conf = env.conf
+    val shuffleManager = env.shuffleManager
     val sortBasedShuffleOn = shuffleManager.isInstanceOf[SortShuffleManager]
     val bypassMergeThreshold = conf.getInt("spark.shuffle.sort.bypassMergeThreshold", 200)
     if (sortBasedShuffleOn) {
-      val bypassIsSupported = SparkEnv.get.shuffleManager.isInstanceOf[SortShuffleManager]
-      if (bypassIsSupported && partitioner.numPartitions <= bypassMergeThreshold) {
+      if (partitioner.numPartitions <= bypassMergeThreshold) {
         // If we're using the original SortShuffleManager and the number of output partitions is
         // sufficiently small, then Spark will fall back to the hash-based shuffle write path, which
         // doesn't buffer deserialized records.

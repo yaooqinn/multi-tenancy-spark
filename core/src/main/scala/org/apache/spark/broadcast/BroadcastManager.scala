@@ -23,6 +23,7 @@ import scala.reflect.ClassTag
 
 import org.apache.spark.{SecurityManager, SparkConf}
 import org.apache.spark.internal.Logging
+import org.apache.spark.util.Utils
 
 private[spark] class BroadcastManager(
     val isDriver: Boolean,
@@ -31,7 +32,8 @@ private[spark] class BroadcastManager(
   extends Logging {
 
   private var initialized = false
-  private var broadcastFactory: BroadcastFactory = null
+  private var broadcastFactory: BroadcastFactory = _
+  private val user = Utils.getCurrentUserName()
 
   initialize()
 
@@ -57,6 +59,6 @@ private[spark] class BroadcastManager(
   }
 
   def unbroadcast(id: Long, removeFromDriver: Boolean, blocking: Boolean) {
-    broadcastFactory.unbroadcast(id, removeFromDriver, blocking)
+    broadcastFactory.unbroadcast(id, removeFromDriver, blocking, user)
   }
 }

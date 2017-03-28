@@ -119,7 +119,8 @@ private[spark] class PythonRunner(
       partitionIndex: Int,
       context: TaskContext): Iterator[Array[Byte]] = {
     val startTime = System.currentTimeMillis
-    val env = SparkEnv.get
+    val user = Utils.getCurrentUserName
+    val env = SparkEnv.get(user)
     val localdir = env.blockManager.diskBlockManager.localDirs.map(f => f.getPath()).mkString(",")
     envVars.put("SPARK_LOCAL_DIRS", localdir) // it's also used in monitor thread
     if (reuse_worker) {
@@ -276,7 +277,7 @@ private[spark] class PythonRunner(
         // Python version of driver
         PythonRDD.writeUTF(pythonVer, dataOut)
         // sparkFilesDir
-        PythonRDD.writeUTF(SparkFiles.getRootDirectory(), dataOut)
+        PythonRDD.writeUTF(SparkFiles.getRootDirectory, dataOut)
         // Python includes (*.zip and *.egg files)
         dataOut.writeInt(pythonIncludes.size)
         for (include <- pythonIncludes) {
@@ -876,7 +877,9 @@ private[spark] class PythonAccumulatorV2(
 
   Utils.checkHost(serverHost, "Expected hostname")
 
-  val bufferSize = SparkEnv.get.conf.getInt("spark.buffer.size", 65536)
+  private val user = Utils.getCurrentUserName
+
+  val bufferSize = SparkEnv.get(user).conf.getInt("spark.buffer.size", 65536)
 
   /**
    * We try to reuse a single Socket to transfer accumulator updates, as they are all added
@@ -946,7 +949,8 @@ private[spark] class PythonBroadcast(@transient var path: String) extends Serial
    * Write data into disk, using randomly generated name.
    */
   private def readObject(in: ObjectInputStream): Unit = Utils.tryOrIOException {
-    val dir = new File(Utils.getLocalDir(SparkEnv.get.conf))
+    val user = Utils.getCurrentUserName
+    val dir = new File(Utils.getLocalDir(SparkEnv.get(user).conf))
     val file = File.createTempFile("broadcast", "", dir)
     path = file.getAbsolutePath
     val out = new FileOutputStream(file)

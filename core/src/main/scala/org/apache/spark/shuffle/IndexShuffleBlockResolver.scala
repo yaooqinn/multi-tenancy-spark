@@ -21,7 +21,6 @@ import java.io._
 
 import com.google.common.io.ByteStreams
 
-import org.apache.spark.{SparkConf, SparkEnv}
 import org.apache.spark.internal.Logging
 import org.apache.spark.io.NioBufferedFileInputStream
 import org.apache.spark.network.buffer.{FileSegmentManagedBuffer, ManagedBuffer}
@@ -29,6 +28,7 @@ import org.apache.spark.network.netty.SparkTransportConf
 import org.apache.spark.shuffle.IndexShuffleBlockResolver.NOOP_REDUCE_ID
 import org.apache.spark.storage._
 import org.apache.spark.util.Utils
+import org.apache.spark.{SparkConf, SparkEnv}
 
 /**
  * Create and maintain the shuffle blocks' mapping between logic block and physical file location.
@@ -47,7 +47,9 @@ private[spark] class IndexShuffleBlockResolver(
   extends ShuffleBlockResolver
   with Logging {
 
-  private lazy val blockManager = Option(_blockManager).getOrElse(SparkEnv.get.blockManager)
+  private val user = Utils.getCurrentUserName
+
+  private lazy val blockManager = Option(_blockManager).getOrElse(SparkEnv.get(user).blockManager)
 
   private val transportConf = SparkTransportConf.fromSparkConf(conf, "shuffle")
 

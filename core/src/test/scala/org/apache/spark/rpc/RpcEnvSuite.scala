@@ -52,7 +52,7 @@ abstract class RpcEnvSuite extends SparkFunSuite with BeforeAndAfterAll {
 
     val sparkEnv = mock(classOf[SparkEnv])
     when(sparkEnv.rpcEnv).thenReturn(env)
-    SparkEnv.set(sparkEnv)
+    SparkEnv.set("test", sparkEnv)
   }
 
   override def afterAll(): Unit = {
@@ -60,7 +60,7 @@ abstract class RpcEnvSuite extends SparkFunSuite with BeforeAndAfterAll {
       if (env != null) {
         env.shutdown()
       }
-      SparkEnv.set(null)
+      SparkEnv.set("test", null)
     } finally {
       super.afterAll()
     }

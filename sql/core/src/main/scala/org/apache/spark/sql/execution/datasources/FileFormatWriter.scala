@@ -26,6 +26,7 @@ import org.apache.hadoop.fs.Path
 import org.apache.hadoop.mapreduce._
 import org.apache.hadoop.mapreduce.lib.output.FileOutputFormat
 import org.apache.hadoop.mapreduce.task.TaskAttemptContextImpl
+import org.apache.hadoop.security.UserGroupInformation
 
 import org.apache.spark._
 import org.apache.spark.internal.Logging
@@ -352,14 +353,15 @@ object FileFormatWriter extends Logging {
       val getPartitionString = UnsafeProjection.create(
         Seq(Concat(partitionStringExpression)), description.partitionColumns)
 
+      val user = UserGroupInformation.getCurrentUser.getShortUserName
       // Sorts the data before write, so that we only need one writer at the same time.
       val sorter = new UnsafeKVExternalSorter(
         sortingKeySchema,
         StructType.fromAttributes(description.nonPartitionColumns),
-        SparkEnv.get.blockManager,
-        SparkEnv.get.serializerManager,
+        SparkEnv.get(user).blockManager,
+        SparkEnv.get(user).serializerManager,
         TaskContext.get().taskMemoryManager().pageSizeBytes,
-        SparkEnv.get.conf.getLong("spark.shuffle.spill.numElementsForceSpillThreshold",
+        SparkEnv.get(user).conf.getLong("spark.shuffle.spill.numElementsForceSpillThreshold",
           UnsafeExternalSorter.DEFAULT_NUM_ELEMENTS_FOR_SPILL_THRESHOLD))
 
       while (iter.hasNext) {

@@ -41,7 +41,7 @@ private[spark] trait BroadcastFactory {
    */
   def newBroadcast[T: ClassTag](value: T, isLocal: Boolean, id: Long): Broadcast[T]
 
-  def unbroadcast(id: Long, removeFromDriver: Boolean, blocking: Boolean): Unit
+  def unbroadcast(id: Long, removeFromDriver: Boolean, blocking: Boolean, user: String): Unit
 
   def stop(): Unit
 }

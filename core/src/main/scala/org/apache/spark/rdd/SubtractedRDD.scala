@@ -23,13 +23,8 @@ import scala.collection.JavaConverters._
 import scala.collection.mutable.ArrayBuffer
 import scala.reflect.ClassTag
 
-import org.apache.spark.Dependency
-import org.apache.spark.OneToOneDependency
-import org.apache.spark.Partition
-import org.apache.spark.Partitioner
-import org.apache.spark.ShuffleDependency
-import org.apache.spark.SparkEnv
-import org.apache.spark.TaskContext
+import org.apache.spark._
+import org.apache.spark.util.Utils
 
 /**
  * An optimized version of cogroup for set difference/subtraction.
@@ -107,7 +102,8 @@ private[spark] class SubtractedRDD[K: ClassTag, V: ClassTag, W: ClassTag](
             .asInstanceOf[Iterator[Product2[K, V]]].foreach(op)
 
         case shuffleDependency: ShuffleDependency[_, _, _] =>
-          val iter = SparkEnv.get.shuffleManager
+          val user = Utils.getCurrentUserName
+          val iter = SparkEnv.get(user).shuffleManager
             .getReader(
               shuffleDependency.shuffleHandle, partition.index, partition.index + 1, context)
             .read()

@@ -23,16 +23,16 @@ import java.nio.charset.StandardCharsets
 
 import scala.collection.mutable
 
-import com.esotericsoftware.kryo.{Kryo, Serializer => KSerializer}
 import com.esotericsoftware.kryo.io.{Input => KryoInput, Output => KryoOutput}
-import org.apache.avro.{Schema, SchemaNormalization}
+import com.esotericsoftware.kryo.{Kryo, Serializer => KSerializer}
 import org.apache.avro.generic.{GenericData, GenericRecord}
 import org.apache.avro.io._
+import org.apache.avro.{Schema, SchemaNormalization}
 import org.apache.commons.io.IOUtils
 
-import org.apache.spark.{SparkEnv, SparkException}
 import org.apache.spark.io.CompressionCodec
 import org.apache.spark.util.Utils
+import org.apache.spark.{SparkEnv, SparkException}
 
 /**
  * Custom serializer used for generic Avro records. If the user registers the schemas
@@ -59,11 +59,12 @@ private[serializer] class GenericAvroSerializer(schemas: Map[Long, String])
   private val fingerprintCache = new mutable.HashMap[Schema, Long]()
   private val schemaCache = new mutable.HashMap[Long, Schema]()
 
+  private val user = Utils.getCurrentUserName
   // GenericAvroSerializer can't take a SparkConf in the constructor b/c then it would become
   // a member of KryoSerializer, which would make KryoSerializer not Serializable.  We make
   // the codec lazy here just b/c in some unit tests, we use a KryoSerializer w/out having
   // the SparkEnv set (note those tests would fail if they tried to serialize avro data).
-  private lazy val codec = CompressionCodec.createCodec(SparkEnv.get.conf)
+  private lazy val codec = CompressionCodec.createCodec(SparkEnv.get(user).conf)
 
   /**
    * Used to compress Schemas when they are being sent over the wire.

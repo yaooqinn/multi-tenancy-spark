@@ -28,17 +28,17 @@ import scala.util.control.NonFatal
 
 import com.google.common.primitives.Longs
 import org.apache.hadoop.conf.Configuration
-import org.apache.hadoop.fs.{FileStatus, FileSystem, Path, PathFilter}
 import org.apache.hadoop.fs.FileSystem.Statistics
+import org.apache.hadoop.fs.{FileStatus, FileSystem, Path, PathFilter}
 import org.apache.hadoop.mapred.JobConf
-import org.apache.hadoop.security.{Credentials, UserGroupInformation}
-import org.apache.hadoop.security.token.{Token, TokenIdentifier}
 import org.apache.hadoop.security.token.delegation.AbstractDelegationTokenIdentifier
+import org.apache.hadoop.security.token.{Token, TokenIdentifier}
+import org.apache.hadoop.security.{Credentials, UserGroupInformation}
 
-import org.apache.spark.{SparkConf, SparkException}
 import org.apache.spark.annotation.DeveloperApi
 import org.apache.spark.internal.Logging
 import org.apache.spark.util.Utils
+import org.apache.spark.{SparkConf, SparkException}
 
 /**
  * :: DeveloperApi ::
@@ -49,7 +49,7 @@ class SparkHadoopUtil extends Logging {
   private val sparkConf = new SparkConf(false).loadFromSystemProperties(true)
   val conf: Configuration = newConfiguration(sparkConf)
   UserGroupInformation.setConfiguration(conf)
-
+  
   /**
    * Runs the given function with a Hadoop UserGroupInformation as a thread local variable
    * (distributed to child threads), used for authenticating HDFS and YARN calls.
@@ -66,6 +66,47 @@ class SparkHadoopUtil extends Logging {
     ugi.doAs(new PrivilegedExceptionAction[Unit] {
       def run: Unit = func()
     })
+  }
+
+  def runAsProxyUser(user: String)(func: () => Unit): Unit = {
+    require(sparkConf.contains("spark.yarn.keytab") && sparkConf.contains("spark.yarn.principal"),
+      "spark.yarn.keytab && spark.yarn.principal shouldn't be null")
+    val keytab = sparkConf.get("spark.yarn.keytab")
+    val principal = sparkConf.get("spark.yarn.principal")
+    val realUser = UserGroupInformation.loginUserFromKeytabAndReturnUGI(principal, keytab)
+    val proxyUser = createProxyUser(user, realUser)
+    transferCredentials(realUser, proxyUser)
+    proxyUser.doAs(new PrivilegedExceptionAction[Unit] {
+      def run: Unit = func()
+    })
+  }
+
+  /**
+   * Create a proxy user using username of the effective user and the ugi of the
+   * real user.
+   * @param user proxy user
+   * @return proxyUser ugi
+   */
+  def createProxyUser(user: String): UserGroupInformation = {
+    val currentUser = UserGroupInformation.getCurrentUser
+    log.info("Current logged-in user is " + currentUser.getUserName)
+    val proxyUser = UserGroupInformation.createProxyUser(user, currentUser)
+    log.info("Current proxy-user is " + proxyUser.getUserName)
+    transferCredentials(currentUser, proxyUser)
+    proxyUser
+  }
+
+  /**
+   * Create a proxy user using username of the effective user and the ugi of the
+   * real user.
+   * @param user
+   * @param realUser
+   * @return
+   */
+  def createProxyUser(user: String, realUser: UserGroupInformation): UserGroupInformation = {
+    val proxyUser = UserGroupInformation.createProxyUser(user, realUser)
+    log.info("Current proxy-user is " + proxyUser.getUserName)
+    proxyUser
   }
 
   def transferCredentials(source: UserGroupInformation, dest: UserGroupInformation) {
@@ -136,7 +177,7 @@ class SparkHadoopUtil extends Logging {
   def loginUserFromKeytab(principalName: String, keytabFilename: String) {
     UserGroupInformation.loginUserFromKeytab(principalName, keytabFilename)
   }
-
+  
   /**
    * Returns a function that can be called to find Hadoop FileSystem bytes read. If
    * getFSBytesReadOnThreadCallback is called from thread r at time t, the returned callback will

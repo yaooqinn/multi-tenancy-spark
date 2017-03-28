@@ -30,15 +30,15 @@ import org.apache.hadoop.hive.shims.Utils
 import org.apache.hive.service.cli._
 import org.apache.hive.service.cli.operation.ExecuteStatementOperation
 import org.apache.hive.service.cli.session.HiveSession
+
 import org.apache.spark.internal.Logging
-import org.apache.spark.sql.{DataFrame, SQLContext, Row => SparkRow}
+import org.apache.spark.sql.{DataFrame, SQLContext, SparkSession, Row => SparkRow}
 import org.apache.spark.sql.execution.command.SetCommand
 import org.apache.spark.sql.hive.HiveUtils
 import org.apache.spark.sql.hive.client.HiveClient
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 import org.apache.spark.util.{Utils => SparkUtils}
-
 import org.apache.hadoop.hive.ql.session.SessionState
 
 private[hive] class SparkExecuteStatementOperation(
@@ -47,7 +47,7 @@ private[hive] class SparkExecuteStatementOperation(
     client: HiveClient,
     confOverlay: JMap[String, String],
     runInBackground: Boolean = true)
-    (sqlContext: SQLContext, sessionToActivePool: JMap[SessionHandle, String])
+    (sparkSession: SparkSession, sessionToActivePool: JMap[SessionHandle, String])
   extends ExecuteStatementOperation(parentSession, statement, confOverlay, runInBackground)
   with Logging {
 
@@ -68,7 +68,7 @@ private[hive] class SparkExecuteStatementOperation(
 
   def close(): Unit = {
     // RDDs will be cleaned automatically upon garbage collection.
-    sqlContext.sparkContext.clearJobGroup()
+    sparkSession.sparkContext.clearJobGroup()
     logDebug(s"CLOSING $statementId")
     cleanup(OperationState.CLOSED)
   }
@@ -204,7 +204,7 @@ private[hive] class SparkExecuteStatementOperation(
     logInfo(s"Running query '$statement' with $statementId")
     setState(OperationState.RUNNING)
     // Always use the latest class loader provided by executionHive's state.
-    val executionHiveClassLoader = sqlContext.sharedState.jarClassLoader
+    val executionHiveClassLoader = sparkSession.sharedState.jarClassLoader
     Thread.currentThread().setContextClassLoader(executionHiveClassLoader)
 
     HiveThriftServer2.listener.onStatementStart(
@@ -213,14 +213,14 @@ private[hive] class SparkExecuteStatementOperation(
       statement,
       statementId,
       parentSession.getUsername)
-    sqlContext.sparkContext.setJobGroup(statementId, statement)
+    sparkSession.sparkContext.setJobGroup(statementId, statement)
     val pool = sessionToActivePool.get(parentSession.getSessionHandle)
     if (pool != null) {
-      sqlContext.sparkContext.setLocalProperty("spark.scheduler.pool", pool)
+      sparkSession.sparkContext.setLocalProperty("spark.scheduler.pool", pool)
     }
     try {
       client.authorize(statement)
-      result = sqlContext.sql(statement)
+      result = sparkSession.sql(statement)
       logDebug(result.queryExecution.toString())
       result.queryExecution.logical match {
         case SetCommand(Some((SQLConf.THRIFTSERVER_POOL.key, Some(value)))) =>
@@ -231,7 +231,7 @@ private[hive] class SparkExecuteStatementOperation(
       HiveThriftServer2.listener.onStatementParsed(statementId, result.queryExecution.toString())
       iter = {
         val useIncrementalCollect =
-          sqlContext.getConf("spark.sql.thriftServer.incrementalCollect", "false").toBoolean
+          sparkSession.conf.get("spark.sql.thriftServer.incrementalCollect", "false").toBoolean
         if (useIncrementalCollect) {
           result.toLocalIterator.asScala
         } else {
@@ -267,7 +267,7 @@ private[hive] class SparkExecuteStatementOperation(
   override def cancel(): Unit = {
     logInfo(s"Cancel '$statement' with $statementId")
     if (statementId != null) {
-      sqlContext.sparkContext.cancelJobGroup(statementId)
+      sparkSession.sparkContext.cancelJobGroup(statementId)
     }
     cleanup(OperationState.CANCELED)
   }

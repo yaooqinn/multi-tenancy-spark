@@ -23,6 +23,7 @@ import scala.collection.JavaConverters._
 import scala.collection.mutable.ArrayBuffer
 
 import net.razorvine.pickle.{Pickler, Unpickler}
+import org.apache.hadoop.security.UserGroupInformation
 
 import org.apache.spark.{SparkEnv, TaskContext}
 import org.apache.spark.api.python.{ChainedPythonFunctions, PythonRunner}
@@ -89,8 +90,9 @@ case class BatchEvalPythonExec(udfs: Seq[PythonUDF], output: Seq[Attribute], chi
 
       // The queue used to buffer input rows so we can drain it to
       // combine input with output from Python.
+      val user = UserGroupInformation.getCurrentUser.getShortUserName
       val queue = HybridRowQueue(TaskContext.get().taskMemoryManager(),
-        new File(Utils.getLocalDir(SparkEnv.get.conf)), child.output.length)
+        new File(Utils.getLocalDir(SparkEnv.get(user).conf)), child.output.length)
       TaskContext.get().addTaskCompletionListener({ ctx =>
         queue.close()
       })

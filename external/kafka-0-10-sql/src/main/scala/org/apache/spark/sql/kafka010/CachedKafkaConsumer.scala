@@ -22,6 +22,7 @@ import java.util.concurrent.TimeoutException
 
 import scala.collection.JavaConverters._
 
+import org.apache.hadoop.security.UserGroupInformation
 import org.apache.kafka.clients.consumer.{ConsumerConfig, ConsumerRecord, KafkaConsumer, OffsetOutOfRangeException}
 import org.apache.kafka.common.TopicPartition
 
@@ -302,10 +303,12 @@ private[kafka010] object CachedKafkaConsumer extends Logging {
 
   private val UNKNOWN_OFFSET = -2L
 
+  private val user = UserGroupInformation.getCurrentUser.getShortUserName
+
   private case class CacheKey(groupId: String, topicPartition: TopicPartition)
 
   private lazy val cache = {
-    val conf = SparkEnv.get.conf
+    val conf = SparkEnv.get(user).conf
     val capacity = conf.getInt("spark.sql.kafkaConsumerCache.capacity", 64)
     new ju.LinkedHashMap[CacheKey, CachedKafkaConsumer](capacity, 0.75f, true) {
       override def removeEldestEntry(

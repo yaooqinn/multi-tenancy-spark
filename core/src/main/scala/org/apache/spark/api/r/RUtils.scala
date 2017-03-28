@@ -20,6 +20,8 @@ package org.apache.spark.api.r
 import java.io.File
 import java.util.Arrays
 
+import org.apache.hadoop.security.UserGroupInformation
+
 import org.apache.spark.{SparkEnv, SparkException}
 
 private[spark] object RUtils {
@@ -60,7 +62,8 @@ private[spark] object RUtils {
       if (isDriver) {
         (sys.props("spark.master"), sys.props("spark.submit.deployMode"))
       } else {
-        val sparkConf = SparkEnv.get.conf
+        val user = UserGroupInformation.getCurrentUser.getShortUserName
+        val sparkConf = SparkEnv.get(user).conf
         (sparkConf.get("spark.master"), sparkConf.get("spark.submit.deployMode", "client"))
       }
 

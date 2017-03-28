@@ -36,6 +36,8 @@ private[spark] class YarnClientSchedulerBackend(
   private var client: Client = null
   private var monitorThread: MonitorThread = null
 
+  private val sparkUser = sc.sparkUser
+
   /**
    * Create a Yarn client to submit an application to the ResourceManager.
    * This waits until the application is running.
@@ -53,7 +55,7 @@ private[spark] class YarnClientSchedulerBackend(
     val args = new ClientArguments(argsArrayBuf.toArray)
     totalExpectedExecutors = YarnSparkHadoopUtil.getInitialTargetExecutorNumber(conf)
     client = new Client(args, conf)
-    bindToYarn(client.submitApplication(), None)
+    bindToYarn(client.submitApplication(Some(sparkUser)), None)
 
     // SPARK-8687: Ensure all necessary properties have already been set before
     // we initialize our driver scheduler backend, which serves these properties

@@ -22,7 +22,9 @@ import java.io.{ByteArrayInputStream, ByteArrayOutputStream, DataInputStream, Da
 import scala.collection.mutable.ArrayBuffer
 import scala.concurrent.ExecutionContext
 
-import org.apache.spark.{broadcast, SparkEnv}
+import org.apache.hadoop.security.UserGroupInformation
+
+import org.apache.spark.{SparkEnv, broadcast}
 import org.apache.spark.internal.Logging
 import org.apache.spark.io.CompressionCodec
 import org.apache.spark.rdd.{RDD, RDDOperationScope}
@@ -225,7 +227,8 @@ abstract class SparkPlan extends QueryPlan[SparkPlan] with Logging with Serializ
     execute().mapPartitionsInternal { iter =>
       var count = 0
       val buffer = new Array[Byte](4 << 10)  // 4K
-      val codec = CompressionCodec.createCodec(SparkEnv.get.conf)
+      val user = UserGroupInformation.getCurrentUser.getShortUserName
+      val codec = CompressionCodec.createCodec(SparkEnv.get(user).conf)
       val bos = new ByteArrayOutputStream()
       val out = new DataOutputStream(codec.compressedOutputStream(bos))
       while (iter.hasNext && (n < 0 || count < n)) {
@@ -247,7 +250,8 @@ abstract class SparkPlan extends QueryPlan[SparkPlan] with Logging with Serializ
   private def decodeUnsafeRows(bytes: Array[Byte]): Iterator[InternalRow] = {
     val nFields = schema.length
 
-    val codec = CompressionCodec.createCodec(SparkEnv.get.conf)
+    val user = UserGroupInformation.getCurrentUser.getShortUserName
+    val codec = CompressionCodec.createCodec(SparkEnv.get(user).conf)
     val bis = new ByteArrayInputStream(bytes)
     val ins = new DataInputStream(codec.compressedInputStream(bis))
 

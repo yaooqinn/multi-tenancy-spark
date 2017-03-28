@@ -24,6 +24,8 @@ import scala.collection.mutable.ArrayBuffer
 import scala.reflect.ClassTag
 import scala.util.hashing.byteswap32
 
+import org.apache.hadoop.security.UserGroupInformation
+
 import org.apache.spark.rdd.{PartitionPruningRDD, RDD}
 import org.apache.spark.serializer.JavaSerializer
 import org.apache.spark.util.{CollectionsUtils, Utils}
@@ -110,6 +112,8 @@ class RangePartitioner[K : Ordering : ClassTag, V](
     rdd: RDD[_ <: Product2[K, V]],
     private var ascending: Boolean = true)
   extends Partitioner {
+
+  private val user = Utils.getCurrentUserName
 
   // We allow partitions = 0, which happens when sorting an empty RDD under the default settings.
   require(partitions >= 0, s"Number of partitions cannot be negative but found $partitions.")
@@ -209,7 +213,7 @@ class RangePartitioner[K : Ordering : ClassTag, V](
 
   @throws(classOf[IOException])
   private def writeObject(out: ObjectOutputStream): Unit = Utils.tryOrIOException {
-    val sfactory = SparkEnv.get.serializer
+    val sfactory = SparkEnv.get(user).serializer
     sfactory match {
       case js: JavaSerializer => out.defaultWriteObject()
       case _ =>
@@ -227,7 +231,7 @@ class RangePartitioner[K : Ordering : ClassTag, V](
 
   @throws(classOf[IOException])
   private def readObject(in: ObjectInputStream): Unit = Utils.tryOrIOException {
-    val sfactory = SparkEnv.get.serializer
+    val sfactory = SparkEnv.get(user).serializer
     sfactory match {
       case js: JavaSerializer => in.defaultReadObject()
       case _ =>

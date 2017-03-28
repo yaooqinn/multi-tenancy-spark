@@ -25,6 +25,7 @@ import scala.util.Random
 
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.{FileStatus, Path, RawLocalFileSystem}
+import org.apache.hadoop.security.UserGroupInformation
 import org.scalatest.{BeforeAndAfter, PrivateMethodTester}
 import org.scalatest.concurrent.Eventually._
 import org.scalatest.time.SpanSugar._
@@ -394,6 +395,7 @@ class StateStoreSuite extends SparkFunSuite with BeforeAndAfter with PrivateMeth
         latestStoreVersion += 1
       }
     }
+    val user = UserGroupInformation.getCurrentUser.getShortUserName
 
     quietly {
       withSpark(new SparkContext(conf)) { sc =>
@@ -451,7 +453,7 @@ class StateStoreSuite extends SparkFunSuite with BeforeAndAfter with PrivateMeth
 
       // Verify if instance is unloaded if SparkContext is stopped
       eventually(timeout(10 seconds)) {
-        require(SparkEnv.get === null)
+        require(SparkEnv.get(user) === null)
         assert(!StateStore.isLoaded(storeId))
         assert(!StateStore.isMaintenanceRunning)
       }

@@ -19,6 +19,8 @@ package org.apache.spark.sql.execution
 
 import java.util.Arrays
 
+import org.apache.hadoop.security.UserGroupInformation
+
 import org.apache.spark._
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.InternalRow
@@ -119,6 +121,8 @@ class ShuffledRowRDD(
     specifiedPartitionStartIndices: Option[Array[Int]] = None)
   extends RDD[InternalRow](dependency.rdd.context, Nil) {
 
+  private[this] val user = UserGroupInformation.getCurrentUser.getShortUserName
+
   private[this] val numPreShufflePartitions = dependency.partitioner.numPartitions
 
   private[this] val partitionStartIndices: Array[Int] = specifiedPartitionStartIndices match {
@@ -151,7 +155,8 @@ class ShuffledRowRDD(
   }
 
   override def getPreferredLocations(partition: Partition): Seq[String] = {
-    val tracker = SparkEnv.get.mapOutputTracker.asInstanceOf[MapOutputTrackerMaster]
+    val tracker =
+      SparkEnv.get(user).mapOutputTracker.asInstanceOf[MapOutputTrackerMaster]
     val dep = dependencies.head.asInstanceOf[ShuffleDependency[_, _, _]]
     tracker.getPreferredLocationsForShuffle(dep, partition.index)
   }
@@ -161,7 +166,7 @@ class ShuffledRowRDD(
     // The range of pre-shuffle partitions that we are fetching at here is
     // [startPreShufflePartitionIndex, endPreShufflePartitionIndex - 1].
     val reader =
-      SparkEnv.get.shuffleManager.getReader(
+      SparkEnv.get(user).shuffleManager.getReader(
         dependency.shuffleHandle,
         shuffledRowPartition.startPreShufflePartitionIndex,
         shuffledRowPartition.endPreShufflePartitionIndex,

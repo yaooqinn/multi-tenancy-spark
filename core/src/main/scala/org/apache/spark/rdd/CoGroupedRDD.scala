@@ -88,7 +88,7 @@ class CoGroupedRDD[K: ClassTag](
   private type CoGroupValue = (Any, Int)  // Int is dependency number
   private type CoGroupCombiner = Array[CoGroup]
 
-  private var serializer: Serializer = SparkEnv.get.serializer
+  private var serializer: Serializer = SparkEnv.get(sparkContext.sparkUser).serializer
 
   /** Set a serializer for this RDD's shuffle, or null to use the default (spark.serializer) */
   def setSerializer(serializer: Serializer): CoGroupedRDD[K] = {
@@ -143,7 +143,7 @@ class CoGroupedRDD[K: ClassTag](
 
       case shuffleDependency: ShuffleDependency[_, _, _] =>
         // Read map outputs of shuffle
-        val it = SparkEnv.get.shuffleManager
+        val it = SparkEnv.get(sparkContext.sparkUser).shuffleManager
           .getReader(shuffleDependency.shuffleHandle, split.index, split.index + 1, context)
           .read()
         rddIterators += ((it, depNum))

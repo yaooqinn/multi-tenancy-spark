@@ -40,10 +40,10 @@ class SparkContextSuite extends SparkFunSuite with LocalSparkContext {
     val conf = new SparkConf().setAppName("test").setMaster("local")
       .set("spark.driver.allowMultipleContexts", "false")
     sc = new SparkContext(conf)
-    val envBefore = SparkEnv.get
+    val envBefore = SparkEnv.get(sc.sparkUser)
     // A SparkContext is already running, so we shouldn't be able to create a second one
     intercept[SparkException] { new SparkContext(conf) }
-    val envAfter = SparkEnv.get
+    val envAfter = SparkEnv.get(sc.sparkUser)
     // SparkEnv and other context variables should be the same
     assert(envBefore == envAfter)
     // After stopping the running context, we should be able to create a new one

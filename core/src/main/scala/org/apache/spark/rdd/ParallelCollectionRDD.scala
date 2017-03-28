@@ -25,6 +25,8 @@ import scala.collection.immutable.NumericRange
 import scala.collection.mutable.ArrayBuffer
 import scala.reflect.ClassTag
 
+import org.apache.hadoop.security.UserGroupInformation
+
 import org.apache.spark._
 import org.apache.spark.serializer.JavaSerializer
 import org.apache.spark.util.Utils
@@ -49,8 +51,8 @@ private[spark] class ParallelCollectionPartition[T: ClassTag](
 
   @throws(classOf[IOException])
   private def writeObject(out: ObjectOutputStream): Unit = Utils.tryOrIOException {
-
-    val sfactory = SparkEnv.get.serializer
+    val user = Utils.getCurrentUserName
+    val sfactory = SparkEnv.get(user).serializer
 
     // Treat java serializer with default action rather than going thru serialization, to avoid a
     // separate serialization header.
@@ -68,8 +70,8 @@ private[spark] class ParallelCollectionPartition[T: ClassTag](
 
   @throws(classOf[IOException])
   private def readObject(in: ObjectInputStream): Unit = Utils.tryOrIOException {
-
-    val sfactory = SparkEnv.get.serializer
+    val user = Utils.getCurrentUserName()
+    val sfactory = SparkEnv.get(user).serializer
     sfactory match {
       case js: JavaSerializer => in.defaultReadObject()
       case _ =>

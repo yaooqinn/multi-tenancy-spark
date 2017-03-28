@@ -27,6 +27,7 @@ import scala.util.control.NonFatal
 import com.google.common.io.ByteStreams
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.{FileStatus, Path}
+import org.apache.hadoop.security.UserGroupInformation
 
 import org.apache.spark.{SparkConf, SparkEnv}
 import org.apache.spark.internal.Logging
@@ -245,7 +246,8 @@ private[state] class HDFSBackedStateStoreProvider(
   private val baseDir =
     new Path(id.checkpointLocation, s"${id.operatorId}/${id.partitionId.toString}")
   private val fs = baseDir.getFileSystem(hadoopConf)
-  private val sparkConf = Option(SparkEnv.get).map(_.conf).getOrElse(new SparkConf)
+  private val user = UserGroupInformation.getCurrentUser.getShortUserName
+  private val sparkConf = Option(SparkEnv.get(user)).map(_.conf).getOrElse(new SparkConf)
 
   initialize()
 

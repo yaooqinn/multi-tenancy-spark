@@ -270,7 +270,7 @@ class UISeleniumSuite extends SparkFunSuite with WebBrowser with Matchers with B
         val taskContext = TaskContext.get
         if (taskContext.taskAttemptId() == 1) {
           // Cause the post-shuffle stage to fail on its first attempt with a single task failure
-          val env = SparkEnv.get
+          val env = SparkEnv.get(sc.sparkUser)
           val bmAddress = env.blockManager.blockManagerId
           val shuffleId = shuffleHandle.shuffleId
           val mapId = 0

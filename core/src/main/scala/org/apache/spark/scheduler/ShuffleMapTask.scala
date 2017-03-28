@@ -74,14 +74,14 @@ private[spark] class ShuffleMapTask(
     if (locs == null) Nil else locs.toSet.toSeq
   }
 
-  override def runTask(context: TaskContext): MapStatus = {
+  override def runTask(context: TaskContext, user: String): MapStatus = {
     // Deserialize the RDD using the broadcast variable.
     val threadMXBean = ManagementFactory.getThreadMXBean
     val deserializeStartTime = System.currentTimeMillis()
     val deserializeStartCpuTime = if (threadMXBean.isCurrentThreadCpuTimeSupported) {
       threadMXBean.getCurrentThreadCpuTime
     } else 0L
-    val ser = SparkEnv.get.closureSerializer.newInstance()
+    val ser = SparkEnv.get(user).closureSerializer.newInstance()
     val (rdd, dep) = ser.deserialize[(RDD[_], ShuffleDependency[_, _, _])](
       ByteBuffer.wrap(taskBinary.value), Thread.currentThread.getContextClassLoader)
     _executorDeserializeTime = System.currentTimeMillis() - deserializeStartTime
@@ -91,7 +91,7 @@ private[spark] class ShuffleMapTask(
 
     var writer: ShuffleWriter[Any, Any] = null
     try {
-      val manager = SparkEnv.get.shuffleManager
+      val manager = SparkEnv.get(user).shuffleManager
       writer = manager.getWriter[Any, Any](dep.shuffleHandle, partitionId, context)
       writer.write(rdd.iterator(partition, context).asInstanceOf[Iterator[_ <: Product2[Any, Any]]])
       writer.stop(success = true).get

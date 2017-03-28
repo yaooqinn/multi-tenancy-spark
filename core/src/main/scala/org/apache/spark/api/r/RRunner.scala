@@ -116,7 +116,8 @@ private[spark] class RRunner[U](
       output: OutputStream,
       iter: Iterator[_],
       partitionIndex: Int): Unit = {
-    val env = SparkEnv.get
+    val user = Utils.getCurrentUserName
+    val env = SparkEnv.get(user)
     val taskContext = TaskContext.get()
     val bufferSize = System.getProperty("spark.buffer.size", "65536").toInt
     val stream = new BufferedOutputStream(output, bufferSize)
@@ -124,7 +125,7 @@ private[spark] class RRunner[U](
     new Thread("writer for R") {
       override def run(): Unit = {
         try {
-          SparkEnv.set(env)
+          SparkEnv.set(user, env)
           TaskContext.setTaskContext(taskContext)
           val dataOut = new DataOutputStream(stream)
           dataOut.writeInt(partitionIndex)
@@ -314,6 +315,8 @@ private[r] object RRunner {
   // also fall back to launching workers (worker.R) directly.
   private[this] var errThread: BufferedStreamThread = _
   private[this] var daemonChannel: DataOutputStream = _
+  private[this] val user = Utils.getCurrentUserName
+
 
   /**
    * Start a thread to print the process's stderr to ours
@@ -329,7 +332,7 @@ private[r] object RRunner {
   private def createRProcess(port: Int, script: String): BufferedStreamThread = {
     // "spark.sparkr.r.command" is deprecated and replaced by "spark.r.command",
     // but kept here for backward compatibility.
-    val sparkConf = SparkEnv.get.conf
+    val sparkConf = SparkEnv.get(user).conf
     var rCommand = sparkConf.get("spark.sparkr.r.command", "Rscript")
     rCommand = sparkConf.get("spark.r.command", rCommand)
 
@@ -357,7 +360,7 @@ private[r] object RRunner {
    * ProcessBuilder used to launch worker R processes.
    */
   def createRWorker(port: Int): BufferedStreamThread = {
-    val useDaemon = SparkEnv.get.conf.getBoolean("spark.sparkr.use.daemon", true)
+    val useDaemon = SparkEnv.get(user).conf.getBoolean("spark.sparkr.use.daemon", true)
     if (!Utils.isWindows && useDaemon) {
       synchronized {
         if (daemonChannel == null) {
