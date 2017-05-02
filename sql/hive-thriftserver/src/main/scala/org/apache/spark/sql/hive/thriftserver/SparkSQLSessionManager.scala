@@ -94,7 +94,6 @@ private[hive] class SparkSQLSessionManager(hiveServer: HiveServer2)
     if (rangerUser.isDefined) {
       val statement = s"set hivevar:ranger.user.name = ${rangerUser.get}"
       ss.sql(statement)
-      client.authorize(database.get)
     }
     ss.sql(database.get)
 

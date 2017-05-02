@@ -64,9 +64,8 @@ private[thriftserver] class SparkSQLOperationManager()
         null
       }
 
-
-      if (rangerUser != null && rangerUser != client.getCurrentUser()
-        && verifyChangeRangerUser(parentSession)) {
+      if (rangerUser != null && rangerUser != client.getCurrentUser()) {
+        verifyChangeRangerUser(parentSession)
         val currentDatabase = client.getCurrentDatabase()
         client = client.newSession(rangerUser)
         client.setCurrentDatabase(currentDatabase)
@@ -93,7 +92,7 @@ private[thriftserver] class SparkSQLOperationManager()
   /**
    * Verify whether a real user passed by remote user has rights to change ranger.user.name
    */
-  private def verifyChangeRangerUser(session: HiveSession): Boolean = {
+  private def verifyChangeRangerUser(session: HiveSession): Unit = {
     val hiveConf = session.getHiveConf
     val ipAddress = session.getIpAddress
     val realUser = session.getRealUsername
@@ -101,12 +100,11 @@ private[thriftserver] class SparkSQLOperationManager()
       val loginUser = UserGroupInformation.getLoginUser.getShortUserName
       HiveAuthFactory.verifyProxyAccess(realUser, loginUser, ipAddress, hiveConf)
     } match {
+      case Success(_) =>
       case Failure(e) =>
         logError(e.getMessage)
         throw new HiveSQLException(
           "user " + realUser + " doesn't have access to set ranger.user.name")
-        false
-      case Success(_) => true
     }
   }
 }
