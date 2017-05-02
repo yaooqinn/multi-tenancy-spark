@@ -29,11 +29,7 @@ public interface ICLIService {
 
   SessionHandle openSession(String username, String password,
       Map<String, String> configuration)
-          throws HiveSQLException;
-
-  SessionHandle openSessionWithImpersonation(String username, String password,
-      Map<String, String> configuration, String delegationToken)
-          throws HiveSQLException;
+    throws HiveSQLException;
 
   void closeSession(SessionHandle sessionHandle)
       throws HiveSQLException;

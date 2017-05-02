@@ -92,9 +92,12 @@ public class HiveSessionImpl implements HiveSession {
   private File sessionLogDir;
   private volatile long lastAccessTime;
   private volatile long lastIdleTime;
+  private String realUser;
 
-  public HiveSessionImpl(TProtocolVersion protocol, String username, String password,
+
+  public HiveSessionImpl(TProtocolVersion protocol, String realUser, String username, String password,
       HiveConf serverhiveConf, String ipAddress) {
+    this.realUser = realUser;
     this.username = username;
     this.password = password;
     this.sessionHandle = new SessionHandle(protocol);
@@ -307,6 +310,11 @@ public class HiveSessionImpl implements HiveSession {
   @Override
   public SessionHandle getSessionHandle() {
     return sessionHandle;
+  }
+
+  @Override
+  public String getRealUsername() {
+    return realUser;
   }
 
   @Override
