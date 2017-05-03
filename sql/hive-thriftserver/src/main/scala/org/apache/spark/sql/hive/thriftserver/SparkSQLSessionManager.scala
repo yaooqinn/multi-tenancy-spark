@@ -65,6 +65,7 @@ private[hive] class SparkSQLSessionManager(hiveServer: HiveServer2)
 
   override def openSession(
       protocol: TProtocolVersion,
+      realUser: String,
       username: String,
       passwd: String,
       ipAddress: String,
@@ -72,8 +73,8 @@ private[hive] class SparkSQLSessionManager(hiveServer: HiveServer2)
       withImpersonation: Boolean,
       delegationToken: String): SessionHandle = {
     val sessionHandle =
-      super.openSession(protocol, username, passwd, ipAddress, sessionConf, withImpersonation,
-          delegationToken)
+      super.openSession(protocol, realUser,
+        username, passwd, ipAddress, sessionConf, withImpersonation, delegationToken)
     val session = super.getSession(sessionHandle)
     HiveThriftServer2.listener.onSessionCreated(
       session.getIpAddress, sessionHandle.getSessionId.toString, session.getUsername)
@@ -93,7 +94,6 @@ private[hive] class SparkSQLSessionManager(hiveServer: HiveServer2)
     if (rangerUser.isDefined) {
       val statement = s"set hivevar:ranger.user.name = ${rangerUser.get}"
       ss.sql(statement)
-      client.authorize(database.get)
     }
     ss.sql(database.get)
 

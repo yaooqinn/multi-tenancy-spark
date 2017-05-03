@@ -231,19 +231,21 @@ public class SessionManager extends CompositeService {
    * @return
    * @throws HiveSQLException
    */
-  public SessionHandle openSession(TProtocolVersion protocol, String username, String password, String ipAddress,
+  public SessionHandle openSession(TProtocolVersion protocol, String realUser,
+      String username, String password, String ipAddress,
       Map<String, String> sessionConf, boolean withImpersonation, String delegationToken)
           throws HiveSQLException {
     HiveSession session;
     // If doAs is set to true for HiveServer2, we will create a proxy object for the session impl.
     // Within the proxy object, we wrap the method call in a UserGroupInformation#doAs
     if (withImpersonation) {
-      HiveSessionImplwithUGI sessionWithUGI = new HiveSessionImplwithUGI(protocol, username, password,
-          hiveConf, ipAddress, delegationToken);
+      HiveSessionImplwithUGI sessionWithUGI =
+        new HiveSessionImplwithUGI(protocol,
+          realUser, username, password, hiveConf, ipAddress, delegationToken);
       session = HiveSessionProxy.getProxy(sessionWithUGI, sessionWithUGI.getSessionUgi());
       sessionWithUGI.setProxySession(session);
     } else {
-      session = new HiveSessionImpl(protocol, username, password, hiveConf, ipAddress);
+      session = new HiveSessionImpl(protocol, realUser, username, password, hiveConf, ipAddress);
     }
     session.setSessionManager(this);
     session.setOperationManager(operationManager);

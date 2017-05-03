@@ -36,18 +36,12 @@ public class EmbeddedCLIServiceClient extends CLIServiceClient {
   }
 
   /* (non-Javadoc)
-   * @see org.apache.hive.service.cli.CLIServiceClient#openSession(java.lang.String, java.lang.String, java.util.Map)
-   */
+     * @see org.apache.hive.service.cli.CLIServiceClient#openSession(java.lang.String, java.lang.String, java.util.Map)
+     */
   @Override
   public SessionHandle openSession(String username, String password,
       Map<String, String> configuration) throws HiveSQLException {
     return cliService.openSession(username, password, configuration);
-  }
-
-  @Override
-  public SessionHandle openSessionWithImpersonation(String username, String password,
-      Map<String, String> configuration, String delegationToken) throws HiveSQLException {
-    throw new HiveSQLException("Impersonated session is not supported in the embedded mode");
   }
 
   /* (non-Javadoc)

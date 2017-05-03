@@ -18,18 +18,19 @@
 
 package org.apache.hive.service.cli.thrift;
 
-import javax.security.auth.login.LoginException;
 import java.io.IOException;
 import java.net.InetAddress;
 import java.net.UnknownHostException;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.concurrent.TimeUnit;
+import javax.security.auth.login.LoginException;
 
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
 import org.apache.hadoop.hive.conf.HiveConf;
 import org.apache.hadoop.hive.conf.HiveConf.ConfVars;
+import org.apache.hadoop.security.UserGroupInformation;
 import org.apache.hive.service.AbstractService;
 import org.apache.hive.service.ServiceException;
 import org.apache.hive.service.ServiceUtils;
@@ -74,6 +75,8 @@ public abstract class ThriftCLIService extends AbstractService implements TCLISe
 
   protected TServerEventHandler serverEventHandler;
   protected ThreadLocal<ServerContext> currentServerContext;
+
+  protected String realUser = null;
 
   static class ThriftCLIServerContext implements ServerContext {
     private SessionHandle sessionHandle = null;
@@ -293,27 +296,26 @@ public abstract class ThriftCLIService extends AbstractService implements TCLISe
    * @throws HiveSQLException
    */
   private String getUserName(TOpenSessionReq req) throws HiveSQLException {
-    String userName = null;
     // Kerberos
     if (isKerberosAuthMode()) {
-      userName = hiveAuthFactory.getRemoteUser();
+      realUser = hiveAuthFactory.getRemoteUser();
     }
     // Except kerberos, NOSASL
-    if (userName == null) {
-      userName = TSetIpAddressProcessor.getUserName();
+    if (realUser == null) {
+      realUser = TSetIpAddressProcessor.getUserName();
     }
     // Http transport mode.
     // We set the thread local username, in ThriftHttpServlet.
     if (cliService.getHiveConf().getVar(
         ConfVars.HIVE_SERVER2_TRANSPORT_MODE).equalsIgnoreCase("http")) {
-      userName = SessionManager.getUserName();
+      realUser = SessionManager.getUserName();
     }
-    if (userName == null) {
-      userName = req.getUsername();
+    if (realUser == null) {
+      realUser = req.getUsername();
     }
 
-    userName = getShortName(userName);
-    String effectiveClientUser = getProxyUser(userName, req.getConfiguration(), getIpAddress());
+    realUser = getShortName(realUser);
+    String effectiveClientUser = getProxyUser(req.getConfiguration(), getIpAddress());
     LOG.debug("Client's username: " + effectiveClientUser);
     return effectiveClientUser;
   }
@@ -348,10 +350,10 @@ public abstract class ThriftCLIService extends AbstractService implements TCLISe
     if (cliService.getHiveConf().getBoolVar(ConfVars.HIVE_SERVER2_ENABLE_DOAS) &&
         (userName != null)) {
       String delegationTokenStr = getDelegationToken(userName);
-      sessionHandle = cliService.openSessionWithImpersonation(protocol, userName,
+      sessionHandle = cliService.openSessionWithImpersonation(protocol, realUser, userName,
           req.getPassword(), ipAddress, req.getConfiguration(), delegationTokenStr);
     } else {
-      sessionHandle = cliService.openSession(protocol, userName, req.getPassword(),
+      sessionHandle = cliService.openSession(protocol, realUser, userName, req.getPassword(),
           ipAddress, req.getConfiguration());
     }
     res.setServerProtocolVersion(protocol);
@@ -638,13 +640,12 @@ public abstract class ThriftCLIService extends AbstractService implements TCLISe
 
   /**
    * If the proxy user name is provided then check privileges to substitute the user.
-   * @param realUser
    * @param sessionConf
    * @param ipAddress
    * @return
    * @throws HiveSQLException
    */
-  private String getProxyUser(String realUser, Map<String, String> sessionConf,
+  private String getProxyUser(Map<String, String> sessionConf,
       String ipAddress) throws HiveSQLException {
     String proxyUser = null;
     // Http transport mode.
@@ -674,6 +675,17 @@ public abstract class ThriftCLIService extends AbstractService implements TCLISe
     if (HiveAuthFactory.AuthTypes.NONE.toString()
         .equalsIgnoreCase(hiveConf.getVar(ConfVars.HIVE_SERVER2_AUTHENTICATION))) {
       return proxyUser;
+    }
+
+    // check whether user has access to set hivevar  ranger.user.name
+    if (sessionConf != null && sessionConf.containsKey("set:hivevar:ranger.user.name")) {
+      try {
+        String loginUser =  UserGroupInformation.getLoginUser().getShortUserName();
+        HiveAuthFactory.verifyProxyAccess(realUser, loginUser, ipAddress, hiveConf);
+      } catch (Exception e) {
+        LOG.error(e.getMessage(), e);
+        throw new HiveSQLException("user " + realUser + " doesn't have access to set hivevar ranger.user.name");
+      }
     }
 
     // Verify proxy user privilege of the realUser for the proxyUser

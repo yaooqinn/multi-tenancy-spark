@@ -46,9 +46,9 @@ public class HiveSessionImplwithUGI extends HiveSessionImpl {
   private HiveSession proxySession = null;
   static final Log LOG = LogFactory.getLog(HiveSessionImplwithUGI.class);
 
-  public HiveSessionImplwithUGI(TProtocolVersion protocol, String username, String password,
+  public HiveSessionImplwithUGI(TProtocolVersion protocol, String realUser, String username, String password,
       HiveConf hiveConf, String ipAddress, String delegationToken) throws HiveSQLException {
-    super(protocol, username, password, hiveConf, ipAddress);
+    super(protocol, realUser, username, password, hiveConf, ipAddress);
     setSessionUGI(username);
     setDelegationToken(delegationToken);
 

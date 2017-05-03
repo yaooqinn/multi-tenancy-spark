@@ -20,6 +20,10 @@ package org.apache.spark.sql.hive.thriftserver.server
 import java.util.concurrent.ConcurrentHashMap
 import java.util.{Map => JMap}
 
+import scala.util.{Failure, Success, Try}
+
+import org.apache.hadoop.security.UserGroupInformation
+import org.apache.hive.service.auth.HiveAuthFactory
 import org.apache.hive.service.cli._
 import org.apache.hive.service.cli.operation.{ExecuteStatementOperation, OperationManager}
 import org.apache.hive.service.cli.session.HiveSession
@@ -45,11 +49,13 @@ private[thriftserver] class SparkSQLOperationManager()
       statement: String,
       confOverlay: JMap[String, String],
       async: Boolean): ExecuteStatementOperation = synchronized {
+
     val sessionHandle = parentSession.getSessionHandle
     val sparkSession = sessionToSparkSession.get(sessionHandle)
     var client = sessionToClient.get(sessionHandle)
     val formatted = statement.toLowerCase.split("//s+").mkString(" ")
     if (formatted.startsWith("set hivevar:ranger.user.name")) {
+      // get ranger user name
       val vars = formatted.split("=")
       val rangerUser = if (vars.size > 1) {
         vars(1)
@@ -57,7 +63,9 @@ private[thriftserver] class SparkSQLOperationManager()
         logInfo(s"Please remove `hivevar:` to check hive variables e.g. `set ranger.user.name;`")
         null
       }
+
       if (rangerUser != null && rangerUser != client.getCurrentUser()) {
+        verifyChangeRangerUser(parentSession)
         val currentDatabase = client.getCurrentDatabase()
         client = client.newSession(rangerUser)
         client.setCurrentDatabase(currentDatabase)
@@ -80,4 +88,24 @@ private[thriftserver] class SparkSQLOperationManager()
       s"runInBackground=$runInBackground")
     operation
   }
+
+  /**
+   * Verify whether a real user passed by remote user has rights to change ranger.user.name
+   */
+  private def verifyChangeRangerUser(session: HiveSession): Unit = {
+    val hiveConf = session.getHiveConf
+    val ipAddress = session.getIpAddress
+    val realUser = session.getRealUsername
+    Try {
+      val loginUser = UserGroupInformation.getLoginUser.getShortUserName
+      HiveAuthFactory.verifyProxyAccess(realUser, loginUser, ipAddress, hiveConf)
+    } match {
+      case Success(_) =>
+      case Failure(e) =>
+        logError(e.getMessage)
+        throw new HiveSQLException(
+          "user " + realUser + " doesn't have access to set ranger.user.name")
+    }
+  }
 }
+

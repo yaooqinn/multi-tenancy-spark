@@ -18,13 +18,13 @@
 
 package org.apache.hive.service.cli.session;
 
+import java.io.File;
+
 import org.apache.hadoop.hive.conf.HiveConf;
 import org.apache.hadoop.hive.ql.session.SessionState;
 import org.apache.hive.service.cli.SessionHandle;
 import org.apache.hive.service.cli.operation.OperationManager;
 import org.apache.hive.service.cli.thrift.TProtocolVersion;
-
-import java.io.File;
 
 /**
  * Methods that don't need to be executed under a doAs
@@ -69,6 +69,8 @@ public interface HiveSessionBase {
   void setOperationLogSessionDir(File operationLogRootDir);
 
   SessionHandle getSessionHandle();
+
+  String getRealUsername();
 
   String getUsername();
 
