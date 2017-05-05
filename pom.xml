@@ -183,6 +183,10 @@
     <maven-antrun.version>1.8</maven-antrun.version>
     <commons-crypto.version>1.0.0</commons-crypto.version>
 
+    <!--For Netease deployment added by hzyaoqin -->
+    <mysql.version>5.1.41</mysql.version>
+    <mysql.scope>compile</mysql.scope>
+
     <test.java.home>${java.home}</test.java.home>
     <test.exclude.tags></test.exclude.tags>
 
@@ -212,6 +216,7 @@
     <hive.deps.scope>compile</hive.deps.scope>
     <parquet.deps.scope>compile</parquet.deps.scope>
     <parquet.test.deps.scope>test</parquet.test.deps.scope>
+
 
     <!--
       Overridable test home. So that you can call individual pom files directly without
@@ -760,8 +765,8 @@
       <dependency>
         <groupId>mysql</groupId>
         <artifactId>mysql-connector-java</artifactId>
-        <version>5.1.38</version>
-        <scope>test</scope>
+        <version>${mysql.version}</version>
+        <scope>${mysql.scope}</scope>
       </dependency>
       <dependency>
         <groupId>org.postgresql</groupId>
