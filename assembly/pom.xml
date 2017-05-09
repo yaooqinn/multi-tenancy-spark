@@ -169,6 +169,22 @@
       </dependencies>
     </profile>
     <profile>
+      <id>ranger</id>
+      <dependencies>
+        <dependency>
+          <groupId>org.apache.spark</groupId>
+          <artifactId>spark-ranger_${scala.binary.version}</artifactId>
+          <version>${project.version}</version>
+          <exclusions>
+            <exclusion>
+              <groupId>org.apache.spark</groupId>
+              <artifactId>spark-ranger_${scala.binary.version}</artifactId>
+            </exclusion>
+          </exclusions>
+        </dependency>
+      </dependencies>
+    </profile>
+    <profile>
       <id>spark-ganglia-lgpl</id>
       <dependencies>
         <dependency>

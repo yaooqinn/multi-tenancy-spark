@@ -100,6 +100,8 @@
     <module>sql/catalyst</module>
     <module>sql/core</module>
     <module>sql/hive</module>
+    <module>sql/hive-thriftserver</module>
+    <module>sql/ranger</module>
     <module>assembly</module>
     <module>external/flume</module>
     <module>external/flume-sink</module>
@@ -2601,6 +2603,13 @@
       <id>hive-thriftserver</id>
       <modules>
         <module>sql/hive-thriftserver</module>
+      </modules>
+    </profile>
+
+    <profile>
+      <id>ranger</id>
+      <modules>
+        <module>sql/ranger</module>
       </modules>
     </profile>
 
