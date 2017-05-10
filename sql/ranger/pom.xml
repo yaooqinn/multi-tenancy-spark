@@ -180,35 +180,43 @@
         </dependency>
 
         <dependency>
+            <groupId>ranger-hive-plugin</groupId>
+            <artifactId>ranger-hive-plugin</artifactId>
+            <version>${ranger.version}</version>
+            <scope>system</scope>
+            <systemPath>${project.basedir}/src/lib/ranger-hive-plugin.jar</systemPath>
+        </dependency>
+
+        <dependency>
             <groupId>ranger-plugin-classloader</groupId>
             <artifactId>ranger-plugin-classloader</artifactId>
             <version>${ranger.version}</version>
             <scope>system</scope>
-            <systemPath>${project.basedir}/src/lib/ranger-plugin-classloader-0.5.4.jar</systemPath>
+            <systemPath>${project.basedir}/src/lib/ranger-plugin-classloader.jar</systemPath>
         </dependency>
 
         <dependency>
-            <groupId>ranger-plugin-audit</groupId>
-            <artifactId>ranger-plugin-audit</artifactId>
+            <groupId>ranger-plugins-audit</groupId>
+            <artifactId>ranger-plugins-audit</artifactId>
             <version>${ranger.version}</version>
             <scope>system</scope>
-            <systemPath>${project.basedir}/src/lib/ranger-plugins-audit-0.5.4.jar</systemPath>
+            <systemPath>${project.basedir}/src/lib/ranger-plugins-audit.jar</systemPath>
         </dependency>
 
         <dependency>
-            <groupId>ranger-plugin-common</groupId>
-            <artifactId>ranger-plugin-common</artifactId>
+            <groupId>ranger-plugins-common</groupId>
+            <artifactId>ranger-plugins-common</artifactId>
             <version>${ranger.version}</version>
             <scope>system</scope>
-            <systemPath>${project.basedir}/src/lib/ranger-plugins-common-0.5.4.jar</systemPath>
+            <systemPath>${project.basedir}/src/lib/ranger-plugins-common.jar</systemPath>
         </dependency>
 
         <dependency>
-            <groupId>ranger-plugin-cred</groupId>
-            <artifactId>ranger-plugin-cred</artifactId>
+            <groupId>ranger-plugins-cred</groupId>
+            <artifactId>ranger-plugins-cred</artifactId>
             <version>${ranger.version}</version>
             <scope>system</scope>
-            <systemPath>${project.basedir}/src/lib/ranger-plugins-cred-0.5.4.jar</systemPath>
+            <systemPath>${project.basedir}/src/lib/ranger-plugins-cred.jar</systemPath>
         </dependency>
 
         <dependency>
@@ -216,7 +224,7 @@
             <artifactId>ranger_solrj</artifactId>
             <version>${ranger.version}</version>
             <scope>system</scope>
-            <systemPath>${project.basedir}/src/lib/ranger_solrj-0.5.4.jar</systemPath>
+            <systemPath>${project.basedir}/src/lib/ranger_solrj.jar</systemPath>
         </dependency>
     </dependencies>
 
@@ -242,7 +250,7 @@
                             <overWriteIfNewer>true</overWriteIfNewer>
                             <useSubDirectoryPerType>true</useSubDirectoryPerType>
                             <includeArtifactIds>
-                                ranger-plugin-classloader,ranger-plugin-audit,ranger-plugin-common,ranger-plugin-cred,ranger_solrj,javax.persistence,eclipselink,httpmime,jersey-bundle,jersey-core,jersey-json,jersey-spring,noggit
+                                ranger-hive-plugin,ranger-plugin-classloader,ranger-plugin-audit,ranger-plugin-common,ranger-plugin-cred,ranger_solrj,javax.persistence,eclipselink,httpmime,jersey-bundle,jersey-core,jersey-json,jersey-spring,noggit
                             </includeArtifactIds>
                             <silent>true</silent>
                         </configuration>
