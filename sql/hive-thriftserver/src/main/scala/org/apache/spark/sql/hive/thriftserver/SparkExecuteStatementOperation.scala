@@ -17,29 +17,27 @@
 
 package org.apache.spark.sql.hive.thriftserver
 
-import java.security.PrivilegedExceptionAction
 import java.sql.{Date, Timestamp}
-import java.util.{Arrays, UUID, Map => JMap}
+import java.util.{Arrays, Map => JMap, UUID}
 import java.util.concurrent.RejectedExecutionException
+
 import scala.collection.JavaConverters._
 import scala.collection.mutable.ArrayBuffer
 import scala.util.control.NonFatal
 
 import org.apache.hadoop.hive.metastore.api.FieldSchema
-import org.apache.hadoop.hive.shims.Utils
 import org.apache.hive.service.cli._
 import org.apache.hive.service.cli.operation.ExecuteStatementOperation
 import org.apache.hive.service.cli.session.HiveSession
 
 import org.apache.spark.internal.Logging
-import org.apache.spark.sql.{DataFrame, SQLContext, SparkSession, Row => SparkRow}
+import org.apache.spark.sql.{DataFrame, Row => SparkRow, SparkSession}
 import org.apache.spark.sql.execution.command.SetCommand
 import org.apache.spark.sql.hive.HiveUtils
 import org.apache.spark.sql.hive.client.HiveClient
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 import org.apache.spark.util.{Utils => SparkUtils}
-import org.apache.hadoop.hive.ql.session.SessionState
 
 private[hive] class SparkExecuteStatementOperation(
     parentSession: HiveSession,
@@ -152,32 +150,16 @@ private[hive] class SparkExecuteStatementOperation(
     if (!runInBackground) {
       execute()
     } else {
-      val sparkServiceUGI = Utils.getUGI()
-
       // Runnable impl to call runInternal asynchronously,
       // from a different thread
       val backgroundOperation = new Runnable() {
-
         override def run(): Unit = {
-          val doAsAction = new PrivilegedExceptionAction[Unit]() {
-            override def run(): Unit = {
-              try {
-                execute()
-              } catch {
-                case e: HiveSQLException =>
-                  setOperationException(e)
-                  log.error("Error running hive query: ", e)
-              }
-            }
-          }
-
           try {
-            sparkServiceUGI.doAs(doAsAction)
+            execute()
           } catch {
             case e: Exception =>
               setOperationException(new HiveSQLException(e))
-              logError("Error running hive query as user : " +
-                sparkServiceUGI.getShortUserName(), e)
+              log.error("Error running hive query: ", e)
           }
         }
       }
