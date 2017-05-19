@@ -25,7 +25,7 @@ import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.{FileSystem, Path}
 import org.apache.hadoop.security.{Credentials, UserGroupInformation}
 
-import org.apache.spark.SparkConf
+import org.apache.spark.{CredentialCache, SparkConf}
 import org.apache.spark.deploy.SparkHadoopUtil
 import org.apache.spark.deploy.yarn.config._
 import org.apache.spark.internal.Logging
@@ -53,6 +53,8 @@ private[spark] class CredentialUpdater(
       override def run(): Unit = Utils.logUncaughtExceptions(updateCredentialsIfRequired())
     }
 
+  private val user = Utils.getCurrentUserName()
+
   /** Start the credential updater task */
   def start(): Unit = {
     val startTime = sparkConf.get(CREDENTIALS_UPDATE_TIME)
@@ -79,6 +81,7 @@ private[spark] class CredentialUpdater(
             val newCredentials = getCredentialsFromHDFSFile(remoteFs, credentialsStatus.getPath)
             lastCredentialsFileSuffix = suffix
             UserGroupInformation.getCurrentUser.addCredentials(newCredentials)
+            CredentialCache.set(user, newCredentials)
             logInfo("Credentials updated from credentials file.")
 
             val remainingTime = (getTimeOfNextUpdateFromFileName(credentialsStatus.getPath)
