@@ -36,7 +36,6 @@ import org.apache.hadoop.fs._
 import org.apache.hadoop.fs.permission.FsPermission
 import org.apache.hadoop.io.DataOutputBuffer
 import org.apache.hadoop.mapreduce.MRJobConfig
-import org.apache.hadoop.security.UserGroupInformation.AuthenticationMethod
 import org.apache.hadoop.security.{Credentials, UserGroupInformation}
 import org.apache.hadoop.util.StringUtils
 import org.apache.hadoop.yarn.api.ApplicationConstants.Environment
@@ -55,7 +54,7 @@ import org.apache.spark.internal.Logging
 import org.apache.spark.internal.config._
 import org.apache.spark.launcher.{LauncherBackend, SparkAppHandle, YarnCommandBuilderUtils}
 import org.apache.spark.util.{CallerContext, Utils}
-import org.apache.spark.{SecurityManager, SparkConf, SparkException}
+import org.apache.spark.{CredentialCache, SecurityManager, SparkConf, SparkException}
 
 private[spark] class Client(
     val args: ClientArguments,
@@ -404,6 +403,8 @@ private[spark] class Client(
       // Add credentials to current user's UGI, so that following operations don't need to use the
       // Kerberos tgt to get delegations again in the client side.
       UserGroupInformation.getCurrentUser.addCredentials(credentials)
+      CredentialCache.set(currentUser.getShortUserName, credentials)
+      logInfo("Credentials are cached for " + currentUser.getShortUserName)
       logDebug(YarnSparkHadoopUtil.get.dumpTokens(credentials).mkString("\n"))
     }
 
