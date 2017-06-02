@@ -21,6 +21,7 @@ import java.util.{Map => JMap}
 import java.util.concurrent.Executors
 
 import scala.collection.JavaConverters._
+import scala.collection.mutable.ArrayBuffer
 
 import org.apache.commons.logging.Log
 import org.apache.hadoop.hive.conf.HiveConf
@@ -35,6 +36,7 @@ import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.hive.HiveUtils
 import org.apache.spark.sql.hive.thriftserver.ReflectionUtils.{getAncestorField, invoke, setSuperField}
 import org.apache.spark.sql.hive.thriftserver.server.SparkSQLOperationManager
+
 
 private[hive] class SparkSQLSessionManager(hiveServer: HiveServer2)
   extends SessionManager(hiveServer)
@@ -76,9 +78,7 @@ private[hive] class SparkSQLSessionManager(hiveServer: HiveServer2)
       super.openSession(protocol, realUser,
         username, passwd, ipAddress, sessionConf, withImpersonation, delegationToken)
     val session = super.getSession(sessionHandle)
-    HiveThriftServer2.listener.onSessionCreated(
-      session.getIpAddress, sessionHandle.getSessionId.toString, session.getUsername)
-
+    
     val (rangerUser, _, database) = configureSession(sessionConf)
 
     val ss = getUserSession(username)
@@ -96,14 +96,28 @@ private[hive] class SparkSQLSessionManager(hiveServer: HiveServer2)
       ss.sql(statement)
     }
     ss.sql(database.get)
+    
+    val listeners = ArrayBuffer[AbstractHiveThriftServer2Listener]()
+    listeners += HiveThriftServer2.serverListeners(session.getUserName)
 
     sparkSqlOperationManager.sessionToSparkSession.put(sessionHandle, ss)
     sparkSqlOperationManager.sessionToClient.put(sessionHandle, client)
+  
+    listeners.foreach(listener =>
+    listener.onSessionCreated(
+      session.getIpAddress, sessionHandle.getSessionId.toString,
+      session.getUsername, username, rangerUser.getOrElse("")))
+    
     sessionHandle
   }
 
   override def closeSession(sessionHandle: SessionHandle) {
-    HiveThriftServer2.listener.onSessionClosed(sessionHandle.getSessionId.toString)
+    val session = super.getSession(sessionHandle)
+    val listeners = ArrayBuffer[AbstractHiveThriftServer2Listener]()
+    listeners += HiveThriftServer2.serverListeners(session.getUserName)
+   
+    listeners.foreach(listener =>
+      listener.onSessionClosed(sessionHandle.getSessionId.toString))
     super.closeSession(sessionHandle)
     sparkSqlOperationManager.sessionToActivePool.remove(sessionHandle)
     sparkSqlOperationManager.sessionToSparkSession.remove(sessionHandle)

@@ -49,7 +49,7 @@ private[spark] abstract class YarnSchedulerBackend(
 
   protected var totalExpectedExecutors = 0
 
-  private val yarnSchedulerEndpoint = new YarnSchedulerEndpoint(rpcEnv)
+  private val yarnSchedulerEndpoint = new YarnSchedulerEndpoint(rpcEnv, sc.sparkUser)
 
   private val yarnSchedulerEndpointRef = rpcEnv.setupEndpoint(
     YarnSchedulerBackend.ENDPOINT_NAME, yarnSchedulerEndpoint)
@@ -147,9 +147,13 @@ private[spark] abstract class YarnSchedulerBackend(
   private def addWebUIFilter(
       filterName: String,
       filterParams: Map[String, String],
-      proxyBase: String): Unit = {
+      proxyBase: String,
+      userName: String = ""): Unit = {
     if (proxyBase != null && proxyBase.nonEmpty) {
+      // For multi-tenant mode, only set `spark.ui.proxyBase` not enough, so we set
+      // `spark.ui.proxyBase.userName` to identify different application.
       System.setProperty("spark.ui.proxyBase", proxyBase)
+      System.setProperty("spark.ui.proxyBase." + userName, proxyBase)
     }
 
     val hasFilter =
@@ -208,7 +212,7 @@ private[spark] abstract class YarnSchedulerBackend(
   /**
    * An [[RpcEndpoint]] that communicates with the ApplicationMaster.
    */
-  private class YarnSchedulerEndpoint(override val rpcEnv: RpcEnv)
+  private class YarnSchedulerEndpoint(override val rpcEnv: RpcEnv, userName: String = "")
     extends ThreadSafeRpcEndpoint with Logging {
     private var amEndpoint: Option[RpcEndpointRef] = None
 
@@ -256,7 +260,7 @@ private[spark] abstract class YarnSchedulerBackend(
         }
 
       case AddWebUIFilter(filterName, filterParams, proxyBase) =>
-        addWebUIFilter(filterName, filterParams, proxyBase)
+        addWebUIFilter(filterName, filterParams, proxyBase, userName)
 
       case r @ RemoveExecutor(executorId, reason) =>
         logWarning(reason.toString)

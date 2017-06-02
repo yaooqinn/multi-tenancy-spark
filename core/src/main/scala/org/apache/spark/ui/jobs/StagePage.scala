@@ -289,7 +289,7 @@ private[ui] class StagePage(parent: StagesTab) extends WebUIPage("stage") {
       val (taskTable, taskTableHTML) = try {
         val _taskTable = new TaskPagedTable(
           parent.conf,
-          UIUtils.prependBaseUri(parent.basePath) +
+          UIUtils.prependBaseUri(parent.basePath, sparkUser = parent.sparkUser) +
             s"/stages/stage?id=${stageId}&attempt=${stageAttemptId}",
           tasks,
           hasAccumulators,

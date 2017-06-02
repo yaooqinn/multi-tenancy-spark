@@ -260,7 +260,7 @@ private[ui] class AllJobsPage(parent: JobsTab) extends WebUIPage("") {
         jobs,
         tableHeaderId,
         jobTag,
-        UIUtils.prependBaseUri(parent.basePath),
+        UIUtils.prependBaseUri(parent.basePath, sparkUser = parent.sparkUser),
         "jobs", // subPath
         parameterOtherTable,
         parent.jobProgresslistener.stageIdToInfo,

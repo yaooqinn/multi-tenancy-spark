@@ -41,7 +41,8 @@ private[ui] class StageTableBase(
     progressListener: JobProgressListener,
     isFairScheduler: Boolean,
     killEnabled: Boolean,
-    isFailedStage: Boolean) {
+    isFailedStage: Boolean,
+    sparkUser: String = "") {
   val allParameters = request.getParameterMap().asScala.toMap
   val parameterOtherTable = allParameters.filterNot(_._1.startsWith(stageTag))
     .map(para => para._1 + "=" + para._2(0))
@@ -90,7 +91,8 @@ private[ui] class StageTableBase(
       stageSortColumn,
       stageSortDesc,
       isFailedStage,
-      parameterOtherTable
+      parameterOtherTable,
+      sparkUser
     ).table(page)
   } catch {
     case e @ (_ : IllegalArgumentException | _ : IndexOutOfBoundsException) =>
@@ -144,7 +146,8 @@ private[ui] class StagePagedTable(
     sortColumn: String,
     desc: Boolean,
     isFailedStage: Boolean,
-    parameterOtherTable: Iterable[String]) extends PagedTable[StageTableRowData] {
+    parameterOtherTable: Iterable[String],
+    sparkUser: String = "") extends PagedTable[StageTableRowData] {
 
   override def tableId: String = stageTag + "-table"
 
@@ -157,7 +160,7 @@ private[ui] class StagePagedTable(
 
   override def pageNumberFormField: String = stageTag + ".page"
 
-  val parameterPath = UIUtils.prependBaseUri(basePath) + s"/$subPath/?" +
+  val parameterPath = UIUtils.prependBaseUri(basePath, sparkUser = sparkUser) + s"/$subPath/?" +
     parameterOtherTable.mkString("&")
 
   override val dataSource = new StageDataSource(
@@ -284,7 +287,8 @@ private[ui] class StagePagedTable(
         {if (isFairScheduler) {
           <td>
             <a href={"%s/stages/pool?poolname=%s"
-              .format(UIUtils.prependBaseUri(basePath), data.schedulingPool)}>
+              .format(UIUtils.prependBaseUri(basePath,
+                sparkUser = sparkUser), data.schedulingPool)}>
               {data.schedulingPool}
             </a>
           </td>
@@ -342,7 +346,7 @@ private[ui] class StagePagedTable(
   }
 
   private def makeDescription(s: StageInfo, descriptionOption: Option[String]): Seq[Node] = {
-    val basePathUri = UIUtils.prependBaseUri(basePath)
+    val basePathUri = UIUtils.prependBaseUri(basePath, sparkUser = sparkUser)
 
     val killLink = if (killEnabled) {
       val confirm =

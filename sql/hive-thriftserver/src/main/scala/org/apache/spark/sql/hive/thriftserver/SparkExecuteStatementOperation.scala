@@ -188,13 +188,18 @@ private[hive] class SparkExecuteStatementOperation(
     // Always use the latest class loader provided by executionHive's state.
     val executionHiveClassLoader = sparkSession.sharedState.jarClassLoader
     Thread.currentThread().setContextClassLoader(executionHiveClassLoader)
-
-    HiveThriftServer2.listener.onStatementStart(
-      statementId,
-      parentSession.getSessionHandle.getSessionId.toString,
-      statement,
-      statementId,
-      parentSession.getUsername)
+    
+    val listeners = ArrayBuffer[AbstractHiveThriftServer2Listener]()
+    listeners += HiveThriftServer2.serverListeners(parentSession.getUserName)
+  
+    listeners.foreach(listener =>
+      listener.onStatementStart(
+        statementId,
+        parentSession.getSessionHandle.getSessionId.toString,
+        statement,
+        statementId,
+        parentSession.getUsername))
+    
     sparkSession.sparkContext.setJobGroup(statementId, statement)
     val pool = sessionToActivePool.get(parentSession.getSessionHandle)
     if (pool != null) {
@@ -210,7 +215,9 @@ private[hive] class SparkExecuteStatementOperation(
           logInfo(s"Setting spark.scheduler.pool=$value for future statements in this session.")
         case _ =>
       }
-      HiveThriftServer2.listener.onStatementParsed(statementId, result.queryExecution.toString())
+      // To avoid result too long, only record physical plan string.
+      listeners.foreach( listener =>
+        listener.onStatementParsed(statementId, result.queryExecution.simpleString))
       iter = {
         val useIncrementalCollect =
           sparkSession.conf.get("spark.sql.thriftServer.incrementalCollect", "false").toBoolean
@@ -238,12 +245,14 @@ private[hive] class SparkExecuteStatementOperation(
         val currentState = getStatus().getState()
         logError(s"Error executing query, currentState $currentState, ", e)
         setState(OperationState.ERROR)
-        HiveThriftServer2.listener.onStatementError(
-          statementId, e.getMessage, SparkUtils.exceptionString(e))
+        listeners.foreach(listener =>
+          listener.onStatementError(
+            statementId, e.getMessage, SparkUtils.exceptionString(e)))
         throw new HiveSQLException(e.toString)
     }
     setState(OperationState.FINISHED)
-    HiveThriftServer2.listener.onStatementFinish(statementId)
+    listeners.foreach(listener =>
+      listener.onStatementFinish(statementId))
   }
 
   override def cancel(): Unit = {

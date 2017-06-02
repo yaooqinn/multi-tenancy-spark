@@ -76,7 +76,7 @@ private[ui] class ThriftServerPage(parent: ThriftServerTab) extends WebUIPage(""
 
       def generateDataRow(info: ExecutionInfo): Seq[Node] = {
         val jobLink = info.jobId.map { id: String =>
-          <a href={"%s/jobs/job?id=%s".format(UIUtils.prependBaseUri(parent.basePath), id)}>
+          <a href={"%s/jobs/job?id=%s".format(UIUtils.prependBaseUri(parent.basePath, sparkUser = parent.sparkUser), id)}>
             [{id}]
           </a>
         }
@@ -147,7 +147,7 @@ private[ui] class ThriftServerPage(parent: ThriftServerTab) extends WebUIPage(""
         "Total Execute")
       def generateDataRow(session: SessionInfo): Seq[Node] = {
         val sessionLink = "%s/%s/session?id=%s"
-          .format(UIUtils.prependBaseUri(parent.basePath), parent.prefix, session.sessionId)
+          .format(UIUtils.prependBaseUri(parent.basePath, sparkUser = parent.sparkUser), parent.prefix, session.sessionId)
         <tr>
           <td> {session.userName} </td>
           <td> {session.ip} </td>

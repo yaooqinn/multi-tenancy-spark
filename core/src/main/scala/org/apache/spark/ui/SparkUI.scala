@@ -137,7 +137,15 @@ private[spark] abstract class SparkUITab(parent: SparkUI, prefix: String)
   extends WebUITab(parent, prefix) {
 
   def appName: String = parent.getAppName
-
+  
+  // Define sparkUser, identify different application in WebUI.
+  def sparkUser: String = {
+    if (parent.sc.isEmpty) {
+      ""
+    } else {
+      parent.sc.get.sparkUser
+    }
+  }
 }
 
 private[spark] object SparkUI {

@@ -24,7 +24,6 @@ import java.util.{Date, Locale, TimeZone}
 import scala.util.control.NonFatal
 import scala.xml._
 import scala.xml.transform.{RewriteRule, RuleTransformer}
-
 import org.apache.spark.internal.Logging
 import org.apache.spark.ui.scope.RDDOperationGraph
 
@@ -144,56 +143,88 @@ private[spark] object UIUtils extends Logging {
   }
 
   // Yarn has to go through a proxy so the base uri is provided and has to be on all links
-  def uiRoot: String = {
+  def uiRoot(sparkUser: String = ""): String = {
     // SPARK-11484 - Use the proxyBase set by the AM, if not found then use env.
-    sys.props.get("spark.ui.proxyBase")
+    
+    // To support multi-tenant mode, we set `spark.ui.proxyBase.userName` into System in
+    // yarn client, here we get this variable first.
+    sys.props.get("spark.ui.proxyBase." + sparkUser)
+      .orElse(sys.props.get("spark.ui.proxyBase"))
       .orElse(sys.env.get("APPLICATION_WEB_PROXY_BASE"))
       .getOrElse("")
   }
 
-  def prependBaseUri(basePath: String = "", resource: String = ""): String = {
-    uiRoot + basePath + resource
+  // Add sparkUser to identify different application webUI.
+  def prependBaseUri(basePath: String = "",
+                     resource: String = "",
+                     sparkUser: String = ""): String = {
+    uiRoot(sparkUser) + basePath + resource
+  }
+  
+  // A function wraps `prependBaseUri`, so we can update origin function easily.
+  def prependBaseUriWithUser(sparkUser: String,
+                             f: (String, String, String) => String): (String) => String = {
+    def fn(basePath: String = ""): String = {
+      f(basePath, "", sparkUser)
+    }
+    
+   fn
+  }
+  
+  // A function wraps `render to Seq[Node]`, so we can update origin function easily.
+  def nodeWithUser(sparkUser: String, f: (String) => Seq[Node]): () => Seq[Node] = {
+    def fn(): Seq[Node] = {
+      f(sparkUser)
+    }
+    fn
   }
 
-  def commonHeaderNodes: Seq[Node] = {
+  def commonHeaderNodes(sparkUser: String = ""): Seq[Node] = {
+    val newPrependBaseUri = prependBaseUriWithUser(sparkUser, UIUtils.prependBaseUri)
+    
     <meta http-equiv="Content-type" content="text/html; charset=utf-8" />
-    <link rel="stylesheet" href={prependBaseUri("/static/bootstrap.min.css")} type="text/css"/>
-    <link rel="stylesheet" href={prependBaseUri("/static/vis.min.css")} type="text/css"/>
-    <link rel="stylesheet" href={prependBaseUri("/static/webui.css")} type="text/css"/>
-    <link rel="stylesheet" href={prependBaseUri("/static/timeline-view.css")} type="text/css"/>
-    <script src={prependBaseUri("/static/sorttable.js")} ></script>
-    <script src={prependBaseUri("/static/jquery-1.11.1.min.js")}></script>
-    <script src={prependBaseUri("/static/vis.min.js")}></script>
-    <script src={prependBaseUri("/static/bootstrap-tooltip.js")}></script>
-    <script src={prependBaseUri("/static/initialize-tooltips.js")}></script>
-    <script src={prependBaseUri("/static/table.js")}></script>
-    <script src={prependBaseUri("/static/additional-metrics.js")}></script>
-    <script src={prependBaseUri("/static/timeline-view.js")}></script>
-    <script src={prependBaseUri("/static/log-view.js")}></script>
-    <script src={prependBaseUri("/static/webui.js")}></script>
-    <script>setUIRoot('{UIUtils.uiRoot}')</script>
+    <link rel="stylesheet" href={newPrependBaseUri("/static/bootstrap.min.css")} type="text/css"/>
+    <link rel="stylesheet" href={newPrependBaseUri("/static/vis.min.css")} type="text/css"/>
+    <link rel="stylesheet" href={newPrependBaseUri("/static/webui.css")} type="text/css"/>
+    <link rel="stylesheet" href={newPrependBaseUri("/static/timeline-view.css")} type="text/css"/>
+    <script src={newPrependBaseUri("/static/sorttable.js")} ></script>
+    <script src={newPrependBaseUri("/static/jquery-1.11.1.min.js")}></script>
+    <script src={newPrependBaseUri("/static/vis.min.js")}></script>
+    <script src={newPrependBaseUri("/static/bootstrap-tooltip.js")}></script>
+    <script src={newPrependBaseUri("/static/initialize-tooltips.js")}></script>
+    <script src={newPrependBaseUri("/static/table.js")}></script>
+    <script src={newPrependBaseUri("/static/additional-metrics.js")}></script>
+    <script src={newPrependBaseUri("/static/timeline-view.js")}></script>
+    <script src={newPrependBaseUri("/static/log-view.js")}></script>
+    <script src={newPrependBaseUri("/static/webui.js")}></script>
+    <script>setUIRoot('{UIUtils.uiRoot(sparkUser)}')</script>
   }
 
-  def vizHeaderNodes: Seq[Node] = {
-    <link rel="stylesheet" href={prependBaseUri("/static/spark-dag-viz.css")} type="text/css" />
-    <script src={prependBaseUri("/static/d3.min.js")}></script>
-    <script src={prependBaseUri("/static/dagre-d3.min.js")}></script>
-    <script src={prependBaseUri("/static/graphlib-dot.min.js")}></script>
-    <script src={prependBaseUri("/static/spark-dag-viz.js")}></script>
+  def vizHeaderNodes(sparkUser: String = ""): Seq[Node] = {
+    val newPrependBaseUri = prependBaseUriWithUser(sparkUser, UIUtils.prependBaseUri)
+    
+    <link rel="stylesheet" href={newPrependBaseUri("/static/spark-dag-viz.css")} type="text/css" />
+    <script src={newPrependBaseUri("/static/d3.min.js")}></script>
+    <script src={newPrependBaseUri("/static/dagre-d3.min.js")}></script>
+    <script src={newPrependBaseUri("/static/graphlib-dot.min.js")}></script>
+    <script src={newPrependBaseUri("/static/spark-dag-viz.js")}></script>
   }
 
-  def dataTablesHeaderNodes: Seq[Node] = {
+  def dataTablesHeaderNodes(sparkUser: String): Seq[Node] = {
+    val newPrependBaseUri = prependBaseUriWithUser(sparkUser, UIUtils.prependBaseUri)
+    
     <link rel="stylesheet"
-          href={prependBaseUri("/static/jquery.dataTables.1.10.4.min.css")} type="text/css"/>
+          href={newPrependBaseUri("/static/jquery.dataTables.1.10.4.min.css")} type="text/css"/>
     <link rel="stylesheet"
-          href={prependBaseUri("/static/dataTables.bootstrap.css")} type="text/css"/>
-    <link rel="stylesheet" href={prependBaseUri("/static/jsonFormatter.min.css")} type="text/css"/>
-    <script src={prependBaseUri("/static/jquery.dataTables.1.10.4.min.js")}></script>
-    <script src={prependBaseUri("/static/jquery.cookies.2.2.0.min.js")}></script>
-    <script src={prependBaseUri("/static/jquery.blockUI.min.js")}></script>
-    <script src={prependBaseUri("/static/dataTables.bootstrap.min.js")}></script>
-    <script src={prependBaseUri("/static/jsonFormatter.min.js")}></script>
-    <script src={prependBaseUri("/static/jquery.mustache.js")}></script>
+          href={newPrependBaseUri("/static/dataTables.bootstrap.css")} type="text/css"/>
+    <link rel="stylesheet" href={newPrependBaseUri("/static/jsonFormatter.min.css")}
+          type="text/css"/>
+    <script src={newPrependBaseUri("/static/jquery.dataTables.1.10.4.min.js")}></script>
+    <script src={newPrependBaseUri("/static/jquery.cookies.2.2.0.min.js")}></script>
+    <script src={newPrependBaseUri("/static/jquery.blockUI.min.js")}></script>
+    <script src={newPrependBaseUri("/static/dataTables.bootstrap.min.js")}></script>
+    <script src={newPrependBaseUri("/static/jsonFormatter.min.js")}></script>
+    <script src={newPrependBaseUri("/static/jquery.mustache.js")}></script>
   }
 
   /** Returns a spark page with correctly formatted headers */
@@ -205,29 +236,38 @@ private[spark] object UIUtils extends Logging {
       helpText: Option[String] = None,
       showVisualization: Boolean = false,
       useDataTables: Boolean = false): Seq[Node] = {
-
+  
+    // Pass sparkUser from SparkContext, so we can identify different application WebUI.
+    val sparkUser = activeTab.sparkUser
     val appName = activeTab.appName
     val shortAppName = if (appName.length < 36) appName else appName.take(32) + "..."
     val header = activeTab.headerTabs.map { tab =>
       <li class={if (tab == activeTab) "active" else ""}>
-        <a href={prependBaseUri(activeTab.basePath, "/" + tab.prefix + "/")}>{tab.name}</a>
+        <a href={prependBaseUri(activeTab.basePath, "/" + tab.prefix + "/",
+          sparkUser = sparkUser)}>{tab.name}</a>
       </li>
     }
     val helpButton: Seq[Node] = helpText.map(tooltip(_, "bottom")).getOrElse(Seq.empty)
-
+    
+    // Make new wrap functions with SparkUser.
+    val newCommonHeaderNodes = nodeWithUser(sparkUser, UIUtils.commonHeaderNodes)()
+    val newVizHeaderNodes = nodeWithUser(sparkUser, UIUtils.vizHeaderNodes)()
+    val newDataTablesHeaderNodes = nodeWithUser(sparkUser, UIUtils.dataTablesHeaderNodes)()
+    
     <html>
       <head>
-        {commonHeaderNodes}
-        {if (showVisualization) vizHeaderNodes else Seq.empty}
-        {if (useDataTables) dataTablesHeaderNodes else Seq.empty}
+        {newCommonHeaderNodes}
+        {if (showVisualization) newVizHeaderNodes else Seq.empty}
+        {if (useDataTables) newDataTablesHeaderNodes else Seq.empty}
         <title>{appName} - {title}</title>
       </head>
       <body>
         <div class="navbar navbar-static-top">
           <div class="navbar-inner">
             <div class="brand">
-              <a href={prependBaseUri("/")} class="brand">
-                <img src={prependBaseUri("/static/spark-logo-77x50px-hd.png")} />
+              <a href={prependBaseUri("/", sparkUser = sparkUser)} class="brand">
+                <img src={prependBaseUri("/static/spark-logo-77x50px-hd.png",
+                sparkUser = sparkUser)} />
                 <span class="version">{org.apache.spark.SPARK_VERSION}</span>
               </a>
             </div>
@@ -256,11 +296,15 @@ private[spark] object UIUtils extends Logging {
   def basicSparkPage(
       content: => Seq[Node],
       title: String,
-      useDataTables: Boolean = false): Seq[Node] = {
+      useDataTables: Boolean = false,
+      sparkUser: String = ""): Seq[Node] = {
+    // Make new wrap functions with sparkUser.
+    val newCommonHeaderNodes = nodeWithUser(sparkUser, UIUtils.commonHeaderNodes)()
+    val newDataTablesHeaderNodes = nodeWithUser(sparkUser, UIUtils.dataTablesHeaderNodes)()
     <html>
       <head>
-        {commonHeaderNodes}
-        {if (useDataTables) dataTablesHeaderNodes else Seq.empty}
+        {newCommonHeaderNodes}
+        {if (useDataTables) newDataTablesHeaderNodes else Seq.empty}
         <title>{title}</title>
       </head>
       <body>
@@ -268,8 +312,10 @@ private[spark] object UIUtils extends Logging {
           <div class="row-fluid">
             <div class="span12">
               <h3 style="vertical-align: middle; display: inline-block;">
-                <a style="text-decoration: none" href={prependBaseUri("/")}>
-                  <img src={prependBaseUri("/static/spark-logo-77x50px-hd.png")} />
+                <a style="text-decoration: none" href={prependBaseUri("/",
+                  sparkUser = sparkUser)}>
+                  <img src={prependBaseUri("/static/spark-logo-77x50px-hd.png",
+                  sparkUser = sparkUser)} />
                   <span class="version"
                         style="margin-right: 15px;">{org.apache.spark.SPARK_VERSION}</span>
                 </a>
