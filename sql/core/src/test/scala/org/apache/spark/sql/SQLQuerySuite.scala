@@ -19,7 +19,10 @@ package org.apache.spark.sql
 
 import java.io.File
 import java.math.MathContext
+import java.net.{MalformedURLException, URL}
 import java.sql.Timestamp
+
+import scala.util.{Failure, Success, Try}
 
 import org.apache.spark.{AccumulatorSuite, SparkException}
 import org.apache.spark.sql.catalyst.util.StringUtils
@@ -2481,6 +2484,20 @@ class SQLQuerySuite extends QueryTest with SharedSQLContext {
     withTable("array_tbl") {
       spark.range(10).select(array($"id").as("arr")).write.saveAsTable("array_tbl")
       assert(sql("SELECT * FROM array_tbl where arr = ARRAY(1L)").count == 1)
+    }
+  }
+
+  test("NE-SPARK-23: Allow adding jars from hdfs") {
+    val aHdfsJar = "hdfs://hzyaoqin/yaoqin.jar"
+    val aInvaidJar = "yaoqinfs://hzyaoqin/yaoqin.jar"
+
+    Try { new URL(aHdfsJar) } match {
+      case Success(_) =>
+      case Failure(ex) => logError(ex.getMessage)
+    }
+
+    intercept[MalformedURLException] {
+      new URL(aInvaidJar)
     }
   }
 }
