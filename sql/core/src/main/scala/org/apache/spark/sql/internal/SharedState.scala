@@ -17,10 +17,14 @@
 
 package org.apache.spark.sql.internal
 
+import java.net.URL
+
 import scala.reflect.ClassTag
+import scala.util.{Failure, Success, Try}
 import scala.util.control.NonFatal
 
 import org.apache.hadoop.conf.Configuration
+import org.apache.hadoop.fs.FsUrlStreamHandlerFactory
 
 import org.apache.spark.{SparkConf, SparkContext, SparkException}
 import org.apache.spark.internal.Logging
@@ -138,7 +142,13 @@ private[sql] class SharedState(val sparkContext: SparkContext) extends Logging {
   }
 }
 
-object SharedState {
+object SharedState extends Logging {
+
+  Try { URL.setURLStreamHandlerFactory(new FsUrlStreamHandlerFactory()) } match {
+    case Success(_) =>
+    case Failure(ex) =>
+      logWarning("Failed to set FsUrlStreamHandlerFactory with URL.setURLStreamHandlerFactory", ex)
+  }
 
   private val HIVE_EXTERNAL_CATALOG_CLASS_NAME = "org.apache.spark.sql.hive.HiveExternalCatalog"
 
