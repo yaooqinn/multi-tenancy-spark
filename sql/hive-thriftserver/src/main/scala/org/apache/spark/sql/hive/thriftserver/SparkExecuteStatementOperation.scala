@@ -189,6 +189,8 @@ private[hive] class SparkExecuteStatementOperation(
     val executionHiveClassLoader = sparkSession.sharedState.jarClassLoader
     Thread.currentThread().setContextClassLoader(executionHiveClassLoader)
     
+    // For multi-tenant mode, we need identify different user/session, so
+    // we can display in different webUI, or we may be confused in the webUI.
     val listeners = ArrayBuffer[AbstractHiveThriftServer2Listener]()
     listeners += HiveThriftServer2.serverListeners(parentSession.getUserName)
   

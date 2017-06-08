@@ -33,6 +33,7 @@ private[thriftserver] class ThriftServerTab(userName: String, sparkContext: Spar
   override val name = "JDBC/ODBC Server"
 
   val parent = getSparkUI(sparkContext)
+  // ThriftServerTab renders by different listener's content, identified by user.
   val listener = HiveThriftServer2.serverListeners(userName)
 
   attachPage(new ThriftServerPage(this))
