@@ -71,7 +71,7 @@ abstract class AbstractHiveThriftServer2Listener extends SparkListener{
     * @param rangerUser
     */
   def onSessionCreated(ip: String, sessionId: String,
-                       userName: String = "UNKNOWN", proxyUser: String, rangerUser: String)
+                       userName: String, proxyUser: String, rangerUser: String)
   
   /**
     * Called when session closed.

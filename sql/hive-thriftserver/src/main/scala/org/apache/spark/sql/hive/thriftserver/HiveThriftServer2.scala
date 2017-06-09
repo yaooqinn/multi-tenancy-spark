@@ -86,7 +86,9 @@ object HiveThriftServer2 extends Logging {
         uiTabs = uiTab :: uiTabs
       })
 
-      // Trigger the applicationStart event
+      // `ApplicationStartEvent` is triggered in `SparkContext` initialization, however in multi-tenant mode,
+      // HiveThriftServerListener is started after mutli `SparkContext` initialization, so if you want to listen
+      // `ApplicationStartEvent`, must trigger the applicationStart event mannuly.
       MultiSparkSQLEnv.userToSession.values().asScala.foreach{ ss =>
         ss.sparkContext.triggerApplicationStart()
       }
@@ -191,7 +193,7 @@ object HiveThriftServer2 extends Logging {
     }
 
     override  def onSessionCreated(ip: String, sessionId: String, userName: String = "UNKNOWN",
-                      proxyUser: String = "UNKNOWN", rangerUser: String = "UNKNOWN"): Unit = {
+                      proxyUser: String, rangerUser: String): Unit = {
       synchronized {
         val info = new SessionInfo(sessionId, System.currentTimeMillis, ip, userName)
         sessionList.put(sessionId, info)

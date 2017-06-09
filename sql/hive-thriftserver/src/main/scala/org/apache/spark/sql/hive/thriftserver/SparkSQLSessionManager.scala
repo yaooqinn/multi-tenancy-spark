@@ -104,7 +104,7 @@ private[hive] class SparkSQLSessionManager(hiveServer: HiveServer2)
     sparkSqlOperationManager.sessionToClient.put(sessionHandle, client)
   
     listeners.foreach(listener =>
-    listener.onSessionCreated(
+      listener.onSessionCreated(
       session.getIpAddress, sessionHandle.getSessionId.toString,
       session.getUsername, username, rangerUser.getOrElse("")))
     
@@ -115,9 +115,9 @@ private[hive] class SparkSQLSessionManager(hiveServer: HiveServer2)
     val session = super.getSession(sessionHandle)
     val listeners = ArrayBuffer[AbstractHiveThriftServer2Listener]()
     listeners += HiveThriftServer2.serverListeners(session.getUserName)
-   
     listeners.foreach(listener =>
       listener.onSessionClosed(sessionHandle.getSessionId.toString))
+    
     super.closeSession(sessionHandle)
     sparkSqlOperationManager.sessionToActivePool.remove(sessionHandle)
     sparkSqlOperationManager.sessionToSparkSession.remove(sessionHandle)

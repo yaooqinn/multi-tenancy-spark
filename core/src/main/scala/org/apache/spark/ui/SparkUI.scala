@@ -140,12 +140,9 @@ private[spark] abstract class SparkUITab(parent: SparkUI, prefix: String)
   
   // For Job/Executor/Storage/Stage UITab all extends `SparkUITab`,
   // we need `sparkUser` to identify different application in all those UITabs.
-  def sparkUser: String = {
-    if (parent.sc.isEmpty) {
-      ""
-    } else {
-      parent.sc.get.sparkUser
-    }
+  val sparkUser: String = parent.sc match {
+    case Some(sc) => sc.sparkUser
+    case None => Utils.getCurrentUserName()
   }
 }
 
