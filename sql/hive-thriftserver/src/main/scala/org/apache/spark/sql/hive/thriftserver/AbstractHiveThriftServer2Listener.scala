@@ -20,20 +20,20 @@ package org.apache.spark.sql.hive.thriftserver
 import org.apache.spark.scheduler.SparkListener
 
 /**
-  * As for HiveThriftServer2, listener should not only extends SparkListener, but also
-  * extends some session/statement methods, so define `AbstractHiveThriftServer2Listener`
-  * abstract class to use it easily.
-  *
-  */
+ * As for HiveThriftServer2, listener should not only extends SparkListener, but also
+ * extends some session/statement methods, so define `AbstractHiveThriftServer2Listener`
+ * abstract class to use it easily.
+ *
+ */
 abstract class AbstractHiveThriftServer2Listener extends SparkListener{
   /**
-    * Called when statement started.
-    * @param id
-    * @param sessionId
-    * @param statement
-    * @param groupId
-    * @param userName
-    */
+   * Called when statement created.
+   * @param id
+   * @param sessionId
+   * @param statement
+   * @param groupId
+   * @param userName
+   */
   def onStatementStart(
                         id: String,
                         sessionId: String,
@@ -42,40 +42,40 @@ abstract class AbstractHiveThriftServer2Listener extends SparkListener{
                         userName: String = "UNKNOWN"): Unit
   
   /**
-    * Called when statement parsed.
-    * @param id
-    * @param executionPlan
-    */
+   * Called when statement parsed.
+   * @param id
+   * @param executionPlan
+   */
   def onStatementParsed(id: String, executionPlan: String): Unit
-  
+
   /**
-    * Called when statement errored.
-    * @param id
-    * @param errorMessage
-    * @param errorTrace
-    */
+   * Called when statement errored.
+   * @param id
+   * @param errorMessage
+   * @param errorTrace
+   */
   def onStatementError(id: String, errorMessage: String, errorTrace: String): Unit
   
   /**
-    * Called when statement finished.
-    * @param id
-    */
+   * Called when statement finished.
+   * @param id
+   */
   def onStatementFinish(id: String): Unit
-  
+
   /**
-    * Called when session created.
-    * @param ip
-    * @param sessionId
-    * @param userName
-    * @param proxyUser
-    * @param rangerUser
-    */
+   * Called when session created.
+   * @param ip
+   * @param sessionId
+   * @param userName
+   * @param proxyUser
+   * @param rangerUser
+   */
   def onSessionCreated(ip: String, sessionId: String,
                        userName: String, proxyUser: String, rangerUser: String)
-  
+
   /**
-    * Called when session closed.
-    * @param sessionId
-    */
+   * Called when session closed.
+   * @param sessionId
+   */
   def onSessionClosed(sessionId: String): Unit
 }
