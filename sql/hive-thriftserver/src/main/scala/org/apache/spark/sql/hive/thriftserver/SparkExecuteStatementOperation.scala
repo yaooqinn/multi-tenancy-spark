@@ -226,6 +226,8 @@ private[hive] class SparkExecuteStatementOperation(
       dataTypes = result.queryExecution.analyzed.output.map(_.dataType).toArray
     } catch {
       case e: HiveSQLException =>
+        HiveThriftServer2.listener.onStatementError(
+          statementId, e.getMessage, SparkUtils.exceptionString(e))
         if (getStatus().getState() == OperationState.CANCELED) {
           return
         } else {
@@ -235,15 +237,31 @@ private[hive] class SparkExecuteStatementOperation(
       // Actually do need to catch Throwable as some failures don't inherit from Exception and
       // HiveServer will silently swallow them.
       case e: Throwable =>
-        val currentState = getStatus().getState()
+        val currentState = getStatus.getState
         logError(s"Error executing query, currentState $currentState, ", e)
-        setState(OperationState.ERROR)
         HiveThriftServer2.listener.onStatementError(
           statementId, e.getMessage, SparkUtils.exceptionString(e))
+        if (statementId != null) {
+          sparkSession.sparkContext.cancelJobGroup(statementId)
+        }
+        getStatus.getState match {
+          case OperationState.CANCELED =>
+          case OperationState.FINISHED =>
+          case OperationState.CLOSED =>
+          case OperationState.INITIALIZED => setState(OperationState.CLOSED)
+          case _ => setState(OperationState.ERROR)
+        }
         throw new HiveSQLException(e.toString)
     }
-    setState(OperationState.FINISHED)
     HiveThriftServer2.listener.onStatementFinish(statementId)
+    getStatus.getState match {
+      case OperationState.CANCELED =>
+      case OperationState.FINISHED =>
+      case OperationState.CLOSED =>
+      case OperationState.ERROR =>
+      case OperationState.INITIALIZED => setState(OperationState.CLOSED)
+      case _ => setState(OperationState.FINISHED)
+    }
   }
 
   override def cancel(): Unit = {
