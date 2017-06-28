@@ -449,7 +449,7 @@ private[client] class Shim_v0_12 extends Shim with Logging {
       ctx.setHDFSCleanup(true)
       ctx.setCmd(sql)
       ctx.setHiveTxnManager(txnMgr)
-//      ctx.setExplainLogical(true)
+      ctx.setExplain(true)
 
       val parser = new ParseDriver
       val tree = ParseUtils.findRootNonNullToken(parser.parse(sql, ctx))
