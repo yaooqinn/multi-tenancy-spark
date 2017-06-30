@@ -139,7 +139,7 @@ private[hive] class SparkSQLSessionManager(hiveServer: HiveServer2)
     if (!MultiSparkSQLEnv.userToQueue.containsKey(user)) {
       throw new SparkException(s"Connecting Spark Thrift Server with User [$user] is forbidden," +
         s"no resource is prepared for it. Please change to an available user or add [$user] to " +
-        s"the `spark.yarn.proxy.users` on the server side." )
+        s"the `spark.sql.proxy.users` on the server side." )
     }
     if (!MultiSparkSQLEnv.userToSession.containsKey(user)) {
       throw new SparkException(s"SparkContext for User [$user] is not initialized please restart" +
