@@ -765,13 +765,7 @@ private[spark] class Client(
     populateClasspath(args, yarnConf, sparkConf, env, sparkConf.get(DRIVER_CLASS_PATH))
     env("SPARK_YARN_MODE") = "true"
     env("SPARK_YARN_STAGING_DIR") = stagingDirPath.toString
-    sparkUser match {
-      case Some(user) =>
-        env("HADOOP_PROXY_USER") = user
-        env("SPARK_USER") = user
-      case _ =>
-        env("SPARK_USER") = currentUser.getShortUserName()
-    }
+    env("SPARK_USER") = sparkUser.getOrElse(currentUser.getShortUserName)
     if (loginFromKeytab) {
       val credentialsFile = "credentials-" + UUID.randomUUID().toString
       sparkConf.set(CREDENTIALS_FILE_PATH, new Path(stagingDirPath, credentialsFile).toString)
