@@ -35,6 +35,7 @@ import org.apache.spark.internal.Logging
 import org.apache.spark.scheduler.{SparkListener, SparkListenerApplicationEnd, SparkListenerJobStart}
 import org.apache.spark.sql.hive.HiveUtils
 import org.apache.spark.sql.hive.thriftserver.ui.ThriftServerTab
+import org.apache.spark.sql.hive.thriftserver.ReflectionUtils._
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.util.{ShutdownHookManager, Utils}
 import org.apache.spark.{SparkConf, SparkContext}
@@ -83,6 +84,12 @@ object HiveThriftServer2 extends Logging {
         !ss.sparkContext.isStopped}) {
         logError("SparkContext has stopped even if HiveServer2 has started, so exit")
         System.exit(-1)
+      }
+
+      if (server.isSupportDynamicServiceDiscovery(executionHive.conf)) {
+        logInfo("HiveServer2 HA mode: start to add this HiveServer2 instance to Zookeeper...")
+        invoke(classOf[HiveServer2], server, "addServerInstanceToZooKeeper",
+          classOf[HiveConf] -> executionHive.conf)
       }
     } catch {
       case e: Exception =>
@@ -273,6 +280,12 @@ private[hive] class HiveThriftServer2 extends HiveServer2
     transportMode.toLowerCase(Locale.ENGLISH).equals("http")
   }
 
+  //  If `hive.server2.support.dynamic.service.discovery = true` &&
+  // `hive.zookeeper.quorum` unempty, return true.
+  private def isSupportDynamicServiceDiscovery(hiveConf: HiveConf): Boolean = {
+    hiveConf.getBoolVar(ConfVars.HIVE_SERVER2_SUPPORT_DYNAMIC_SERVICE_DISCOVERY) &&
+      hiveConf.getVar(ConfVars.HIVE_ZOOKEEPER_QUORUM).split(",").length > 0
+  }
 
   override def start(): Unit = {
     super.start()
