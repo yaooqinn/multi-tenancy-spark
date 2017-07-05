@@ -284,4 +284,6 @@ private[hive] trait HiveClient {
   /** get the current user in [[org.apache.hadoop.hive.ql.session.SessionState]] */
   def getCurrentUser(): String
 
+  def close(): Unit
+
 }

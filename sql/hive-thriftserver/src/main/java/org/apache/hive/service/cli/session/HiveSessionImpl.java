@@ -18,11 +18,7 @@
 
 package org.apache.hive.service.cli.session;
 
-import java.io.BufferedReader;
-import java.io.File;
-import java.io.FileInputStream;
-import java.io.IOException;
-import java.io.InputStreamReader;
+import java.io.*;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
@@ -41,7 +37,6 @@ import org.apache.hadoop.hive.metastore.api.MetaException;
 import org.apache.hadoop.hive.ql.exec.FetchFormatter;
 import org.apache.hadoop.hive.ql.exec.ListSinkOperator;
 import org.apache.hadoop.hive.ql.exec.Utilities;
-import org.apache.hadoop.hive.ql.history.HiveHistory;
 import org.apache.hadoop.hive.ql.metadata.Hive;
 import org.apache.hadoop.hive.ql.metadata.HiveException;
 import org.apache.hadoop.hive.ql.processors.SetProcessor;
@@ -49,25 +44,8 @@ import org.apache.hadoop.hive.ql.session.SessionState;
 import org.apache.hadoop.hive.shims.ShimLoader;
 import org.apache.hive.common.util.HiveVersionInfo;
 import org.apache.hive.service.auth.HiveAuthFactory;
-import org.apache.hive.service.cli.FetchOrientation;
-import org.apache.hive.service.cli.FetchType;
-import org.apache.hive.service.cli.GetInfoType;
-import org.apache.hive.service.cli.GetInfoValue;
-import org.apache.hive.service.cli.HiveSQLException;
-import org.apache.hive.service.cli.OperationHandle;
-import org.apache.hive.service.cli.RowSet;
-import org.apache.hive.service.cli.SessionHandle;
-import org.apache.hive.service.cli.TableSchema;
-import org.apache.hive.service.cli.operation.ExecuteStatementOperation;
-import org.apache.hive.service.cli.operation.GetCatalogsOperation;
-import org.apache.hive.service.cli.operation.GetColumnsOperation;
-import org.apache.hive.service.cli.operation.GetFunctionsOperation;
-import org.apache.hive.service.cli.operation.GetSchemasOperation;
-import org.apache.hive.service.cli.operation.GetTableTypesOperation;
-import org.apache.hive.service.cli.operation.GetTypeInfoOperation;
-import org.apache.hive.service.cli.operation.MetadataOperation;
-import org.apache.hive.service.cli.operation.Operation;
-import org.apache.hive.service.cli.operation.OperationManager;
+import org.apache.hive.service.cli.*;
+import org.apache.hive.service.cli.operation.*;
 import org.apache.hive.service.cli.thrift.TProtocolVersion;
 import org.apache.hive.service.server.ThreadWithGarbageCleanup;
 
@@ -275,23 +253,17 @@ public class HiveSessionImpl implements HiveSession {
   }
 
   protected synchronized void acquire(boolean userAccess) {
-    // Need to make sure that the this HiveServer2's session's SessionState is
-    // stored in the thread local for the handler thread.
-    SessionState.setCurrentSessionState(sessionState);
     if (userAccess) {
       lastAccessTime = System.currentTimeMillis();
     }
   }
 
   /**
-   * 1. We'll remove the ThreadLocal SessionState as this thread might now serve
-   * other requests.
-   * 2. We'll cache the ThreadLocal RawStore object for this background thread for an orderly cleanup
+   * We'll cache the ThreadLocal RawStore object for this background thread for an orderly cleanup
    * when this thread is garbage collected later.
    * @see org.apache.hive.service.server.ThreadWithGarbageCleanup#finalize()
    */
   protected synchronized void release(boolean userAccess) {
-    SessionState.detachSession();
     if (ThreadWithGarbageCleanup.currentThread() instanceof ThreadWithGarbageCleanup) {
       ThreadWithGarbageCleanup currentThread =
           (ThreadWithGarbageCleanup) ThreadWithGarbageCleanup.currentThread();
@@ -558,8 +530,8 @@ public class HiveSessionImpl implements HiveSession {
 
   @Override
   public void close() throws HiveSQLException {
+    acquire(true);
     try {
-      acquire(true);
       // Iterate through the opHandles and close their operations
       for (OperationHandle opHandle : opHandleSet) {
         operationManager.closeOperation(opHandle);
@@ -567,26 +539,7 @@ public class HiveSessionImpl implements HiveSession {
       opHandleSet.clear();
       // Cleanup session log directory.
       cleanupSessionLogDir();
-      HiveHistory hiveHist = sessionState.getHiveHistory();
-      if (null != hiveHist) {
-        hiveHist.closeStream();
-      }
-      try {
-        sessionState.close();
-      } finally {
-        sessionState = null;
-      }
-    } catch (IOException ioe) {
-      throw new HiveSQLException("Failure to close", ioe);
     } finally {
-      if (sessionState != null) {
-        try {
-          sessionState.close();
-        } catch (Throwable t) {
-          LOG.warn("Error closing session", t);
-        }
-        sessionState = null;
-      }
       release(true);
     }
   }
