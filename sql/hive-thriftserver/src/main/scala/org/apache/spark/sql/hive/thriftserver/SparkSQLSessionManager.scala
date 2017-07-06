@@ -17,52 +17,70 @@
 
 package org.apache.spark.sql.hive.thriftserver
 
+import java.security.PrivilegedExceptionAction
 import java.util.{Map => JMap}
-import java.util.concurrent.Executors
+import java.util.concurrent.ConcurrentHashMap
 
 import scala.collection.JavaConverters._
 
-import org.apache.commons.logging.Log
 import org.apache.hadoop.hive.conf.HiveConf
 import org.apache.hadoop.hive.conf.HiveConf.ConfVars
-import org.apache.hive.service.cli.SessionHandle
-import org.apache.hive.service.cli.session.SessionManager
+import org.apache.hadoop.hive.shims.Utils
+import org.apache.hadoop.security.UserGroupInformation
+import org.apache.hive.service.cli.{HiveSQLException, SessionHandle}
+import org.apache.hive.service.cli.session._
 import org.apache.hive.service.cli.thrift.TProtocolVersion
 import org.apache.hive.service.server.HiveServer2
 
-import org.apache.spark.SparkException
+import org.apache.spark.{CredentialCache, SparkException}
+import org.apache.spark.deploy.SparkHadoopUtil
+import org.apache.spark.internal.Logging
 import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.hive.HiveUtils
-import org.apache.spark.sql.hive.thriftserver.ReflectionUtils.{getAncestorField, invoke, setSuperField}
+import org.apache.spark.sql.hive.client.HiveClient
 import org.apache.spark.sql.hive.thriftserver.server.SparkSQLOperationManager
 
 private[hive] class SparkSQLSessionManager(hiveServer: HiveServer2)
   extends SessionManager(hiveServer)
-  with ReflectedCompositeService {
+  with ReflectedCompositeService with Logging {
 
   private val defaultQueue = MultiSparkSQLEnv.originConf.get("spark.yarn.queue", "default")
 
   private lazy val sparkSqlOperationManager = new SparkSQLOperationManager()
 
-  override def init(hiveConf: HiveConf) {
-    setSuperField(this, "hiveConf", hiveConf)
+  protected val handleToProxyUser: JMap[SessionHandle, UserGroupInformation] =
+    new ConcurrentHashMap()
 
+
+  override def init(hiveConf: HiveConf) {
+    this.hiveConf = hiveConf
     // Create operation log root directory, if operation logging is enabled
     if (hiveConf.getBoolVar(ConfVars.HIVE_SERVER2_LOGGING_OPERATION_ENABLED)) {
-      invoke(classOf[SessionManager], this, "initOperationLogRootDir")
+      initOperationLogRootDir()
     }
-
-    val backgroundPoolSize = hiveConf.getIntVar(ConfVars.HIVE_SERVER2_ASYNC_EXEC_THREADS)
-    setSuperField(this, "backgroundOperationPool", Executors.newFixedThreadPool(backgroundPoolSize))
-    getAncestorField[Log](this, 3, "LOG").info(
-      s"HiveServer2: Async execution pool size $backgroundPoolSize")
-
-    setSuperField(this, "operationManager", sparkSqlOperationManager)
+    createBackgroundOperationPool()
+    this.operationManager = sparkSqlOperationManager
     addService(sparkSqlOperationManager)
-
     initCompositeService(hiveConf)
   }
 
+  /**
+   * Opens a new session and creates a session handle.
+   * The username passed to this method is the effective username.
+   * If withImpersonation is true (==doAs true) we wrap all the calls in HiveSession
+   * within a UGI.doAs, where UGI corresponds to the effective user.
+   *
+   * @see org.apache.hive.service.cli.thrift.ThriftCLIService getUserName()
+   * @param protocol
+   * @param username
+   * @param passwd
+   * @param ipAddress
+   * @param sessionConf
+   * @param withImpersonation
+   * @param delegationToken
+   * @return
+   * @throws HiveSQLException
+   */
   override def openSession(
       protocol: TProtocolVersion,
       realUser: String,
@@ -72,22 +90,44 @@ private[hive] class SparkSQLSessionManager(hiveServer: HiveServer2)
       sessionConf: JMap[String, String],
       withImpersonation: Boolean,
       delegationToken: String): SessionHandle = {
-    val sessionHandle =
-      super.openSession(protocol, realUser,
-        username, passwd, ipAddress, sessionConf, withImpersonation, delegationToken)
-    val session = super.getSession(sessionHandle)
+    var hiveSession: HiveSession = null
+    var sessionUGI: UserGroupInformation = null
+    // If doAs is set to true for HiveServer2, we will create a proxy object for the session impl.
+    // Within the proxy object, we wrap the method call in a UserGroupInformation#doAs
+    if (withImpersonation) {
+      val sessionWithUGI = new HiveSessionImplwithUGI(protocol, realUser, username,
+        passwd, hiveConf, ipAddress, delegationToken)
+      sessionUGI = sessionWithUGI.getSessionUgi
+      hiveSession = HiveSessionProxy.getProxy(sessionWithUGI, sessionWithUGI.getSessionUgi)
+      sessionWithUGI.setProxySession(hiveSession)
+    } else {
+      sessionUGI = Utils.getUGI
+      hiveSession = new HiveSessionImpl(protocol, realUser, username, passwd, hiveConf, ipAddress)
+    }
+    hiveSession.setSessionManager(this)
+    hiveSession.setOperationManager(sparkSqlOperationManager)
+
+    if (isOperationLogEnabled) hiveSession.setOperationLogSessionDir(operationLogRootDir)
+
+    val sessionHandle = hiveSession.getSessionHandle
+    handleToSession.put(sessionHandle, hiveSession)
+    handleToProxyUser.put(sessionHandle, sessionUGI)
+
     HiveThriftServer2.listener.onSessionCreated(
-      session.getIpAddress, sessionHandle.getSessionId.toString, session.getUsername)
+      hiveSession.getIpAddress, sessionHandle.getSessionId.toString, hiveSession.getUsername)
 
     val (rangerUser, _, database) = configureSession(sessionConf)
 
     val ss = getUserSession(username)
     val metastoreUser = rangerUser.getOrElse(username)
 
-    val client = HiveUtils.newClientForMetadata(
-      ss.sparkContext.conf,
-      ss.sparkContext.hadoopConfiguration,
-      metastoreUser)
+
+    val client = sessionUGI.doAs(new PrivilegedExceptionAction[HiveClient]() {
+      override def run(): HiveClient = HiveUtils.newClientForMetadata(
+        ss.sparkContext.conf,
+        ss.sparkContext.hadoopConfiguration,
+        metastoreUser)
+    })
 
     ss.conf.set("spark.sql.hive.version", HiveUtils.hiveExecutionVersion)
 
@@ -106,8 +146,22 @@ private[hive] class SparkSQLSessionManager(hiveServer: HiveServer2)
     HiveThriftServer2.listener.onSessionClosed(sessionHandle.getSessionId.toString)
     super.closeSession(sessionHandle)
     sparkSqlOperationManager.sessionToActivePool.remove(sessionHandle)
+
+    val user = handleToProxyUser.remove(sessionHandle)
+    val credentials = CredentialCache.get(user.getShortUserName)
+    if (credentials != null) {
+      logInfo(s"Adding Fresh Credentials For User:[${user.getShortUserName}]")
+      user.addCredentials(credentials)
+    }
     sparkSqlOperationManager.sessionToSparkSession.remove(sessionHandle)
-    sparkSqlOperationManager.sessionToClient.remove(sessionHandle)
+    val hiveClient = sparkSqlOperationManager.sessionToClient.remove(sessionHandle)
+    if (hiveClient != null) {
+      val closeClient = new PrivilegedExceptionAction[Unit] {
+        override def run(): Unit = hiveClient.close()
+      }
+      logInfo(s"Closing HiveClient for User: [${user.getShortUserName}]")
+      user.doAs(closeClient)
+    }
   }
 
   /**
@@ -131,7 +185,6 @@ private[hive] class SparkSQLSessionManager(hiveServer: HiveServer2)
           }
       }
     }
-
     (rangerUser, queue, database)
   }
 

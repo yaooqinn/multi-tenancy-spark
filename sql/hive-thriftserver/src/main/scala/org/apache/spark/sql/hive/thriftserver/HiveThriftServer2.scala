@@ -27,18 +27,18 @@ import scala.collection.mutable.ArrayBuffer
 import org.apache.commons.logging.LogFactory
 import org.apache.hadoop.hive.conf.HiveConf
 import org.apache.hadoop.hive.conf.HiveConf.ConfVars
+import org.apache.hadoop.hive.ql.session.SessionState
 import org.apache.hive.service.cli.thrift.{ThriftBinaryCLIService, ThriftHttpCLIService}
 import org.apache.hive.service.server.HiveServer2
 
+import org.apache.spark.{SparkConf, SparkContext}
 import org.apache.spark.deploy.SparkHadoopUtil
 import org.apache.spark.internal.Logging
 import org.apache.spark.scheduler.{SparkListener, SparkListenerApplicationEnd, SparkListenerJobStart}
-import org.apache.spark.sql.hive.HiveUtils
 import org.apache.spark.sql.hive.thriftserver.ui.ThriftServerTab
 import org.apache.spark.sql.hive.thriftserver.ReflectionUtils._
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.util.{ShutdownHookManager, Utils}
-import org.apache.spark.{SparkConf, SparkContext}
 
 /**
  * The main entry point for the Spark SQL port of HiveServer2.  Starts up a `SparkSQLContext` and a
@@ -62,13 +62,17 @@ object HiveThriftServer2 extends Logging {
       uiTabs.foreach(_.detach())
     }
 
-    val executionHive = HiveUtils.newClientForExecution(
-      MultiSparkSQLEnv.originConf,
-      SparkHadoopUtil.get.newConfiguration(MultiSparkSQLEnv.originConf))
+    val hiveConf = new HiveConf(classOf[SessionState])
+    val hadoopConf = SparkHadoopUtil.get.newConfiguration(MultiSparkSQLEnv.originConf)
+    hadoopConf.iterator().asScala.foreach { entry =>
+      val key = entry.getKey
+      val value = entry.getValue
+      hiveConf.set(key, value)
+    }
 
     try {
       val server = new HiveThriftServer2
-      server.init(executionHive.conf)
+      server.init(hiveConf)
       server.start()
       logInfo("HiveThriftServer2 started")
       listener = new HiveThriftServer2Listener(server, MultiSparkSQLEnv.originConf)

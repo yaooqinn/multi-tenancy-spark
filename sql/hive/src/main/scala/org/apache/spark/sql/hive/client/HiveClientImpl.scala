@@ -29,15 +29,11 @@ import org.apache.hadoop.hive.conf.HiveConf
 import org.apache.hadoop.hive.metastore.{TableType => HiveTableType}
 import org.apache.hadoop.hive.metastore.api.{FieldSchema, Database => HiveDatabase}
 import org.apache.hadoop.hive.metastore.api.{SerDeInfo, StorageDescriptor}
-import org.apache.hadoop.hive.ql.{Context, Driver}
+import org.apache.hadoop.hive.ql.Driver
 import org.apache.hadoop.hive.ql.metadata.{Hive, Partition => HivePartition, Table => HiveTable}
-import org.apache.hadoop.hive.ql.parse.{ParseDriver, ParseUtils, SemanticAnalyzerFactory}
 import org.apache.hadoop.hive.ql.processors._
 import org.apache.hadoop.hive.ql.session.SessionState
-import org.apache.hadoop.security.UserGroupInformation
-import org.apache.hadoop.security.UserGroupInformation.AuthenticationMethod
 
-import org.apache.spark.deploy.SparkHadoopUtil
 import org.apache.spark.{SparkConf, SparkException}
 import org.apache.spark.internal.Logging
 import org.apache.spark.metrics.source.HiveCatalogMetrics
@@ -48,7 +44,6 @@ import org.apache.spark.sql.catalyst.catalog._
 import org.apache.spark.sql.catalyst.catalog.CatalogTypes.TablePartitionSpec
 import org.apache.spark.sql.catalyst.expressions.Expression
 import org.apache.spark.sql.catalyst.parser.{CatalystSqlParser, ParseException}
-import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.execution.QueryExecutionException
 import org.apache.spark.sql.hive.HiveUtils
 import org.apache.spark.sql.types.{MetadataBuilder, StructField, StructType}
@@ -107,29 +102,6 @@ private[hive] class HiveClientImpl(
     val original = Thread.currentThread().getContextClassLoader
     // Switch to the initClassLoader.
     Thread.currentThread().setContextClassLoader(initClassLoader)
-
-    // Set up kerberos credentials for UserGroupInformation.loginUser within
-    // current class loader
-    // Instead of using the spark conf of the current spark context, a new
-    // instance of SparkConf is needed for the original value of spark.yarn.keytab
-    // and spark.yarn.principal set in SparkSubmit, as yarn.Client resets the
-    // keytab configuration for the link name in distributed cache
-    val sconf = new SparkConf(true)
-    val proxy =
-      UserGroupInformation.getCurrentUser.getAuthenticationMethod == AuthenticationMethod.PROXY
-    if (!proxy && sconf.contains("spark.yarn.principal")
-            && sconf.contains("spark.yarn.keytab")) {
-      val principalName = sconf.get("spark.yarn.principal")
-      val keytabFileName = sconf.get("spark.yarn.keytab")
-      if (!new File(keytabFileName).exists()) {
-        throw new SparkException(s"Keytab file: ${keytabFileName}" +
-          " specified in spark.yarn.keytab does not exist")
-      } else {
-        logInfo("Attempting to login to Kerberos" +
-          s" using principal: ${principalName} and keytab: ${keytabFileName}")
-        UserGroupInformation.loginUserFromKeytab(principalName, keytabFileName)
-      }
-    }
 
     def isCliSessionState(state: SessionState): Boolean = {
       var temp: Class[_] = if (state != null) state.getClass else null
@@ -936,8 +908,12 @@ private[hive] class HiveClientImpl(
   /** get the current database in [[org.apache.hadoop.hive.ql.session.SessionState]] */
   override def getCurrentDatabase(): String = state.getCurrentDatabase
 
-  /** get the current database in [[org.apache.hadoop.hive.ql.session.SessionState]] */
+  /** get the current user in [[org.apache.hadoop.hive.ql.session.SessionState]] */
+  override def getCurrentUser(): String = user
 
-  override def getCurrentUser() = user
+  override def close(): Unit = withHiveState {
+    state.close()
+    Hive.closeCurrent()
+  }
 
 }

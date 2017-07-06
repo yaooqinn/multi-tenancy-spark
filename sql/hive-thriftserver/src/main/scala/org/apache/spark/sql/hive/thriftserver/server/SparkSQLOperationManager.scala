@@ -17,11 +17,13 @@
 
 package org.apache.spark.sql.hive.thriftserver.server
 
-import java.util.concurrent.ConcurrentHashMap
+import java.security.PrivilegedExceptionAction
 import java.util.{Map => JMap}
+import java.util.concurrent.ConcurrentHashMap
 
 import scala.util.{Failure, Success, Try}
 
+import org.apache.hadoop.hive.shims.Utils
 import org.apache.hadoop.security.UserGroupInformation
 import org.apache.hive.service.auth.HiveAuthFactory
 import org.apache.hive.service.cli._
@@ -67,7 +69,12 @@ private[thriftserver] class SparkSQLOperationManager()
       if (rangerUser != null && rangerUser != client.getCurrentUser()) {
         verifyChangeRangerUser(parentSession)
         val currentDatabase = client.getCurrentDatabase()
-        client = client.newSession(rangerUser)
+        val sessionUGI = Utils.getUGI
+        client = sessionUGI.doAs(new PrivilegedExceptionAction[HiveClient]() {
+          override def run(): HiveClient = {
+            client.newSession(rangerUser)
+          }
+        })
         client.setCurrentDatabase(currentDatabase)
         sessionToClient.remove(sessionHandle)
         sessionToClient.put(sessionHandle, client)

@@ -51,12 +51,11 @@ public class SessionManager extends CompositeService {
   private static final Log LOG = LogFactory.getLog(CompositeService.class);
   public static final String HIVERCFILE = ".hiverc";
   protected HiveConf hiveConf;
-  private final Map<SessionHandle, HiveSession> handleToSession =
-      new ConcurrentHashMap<SessionHandle, HiveSession>();
+  protected final Map<SessionHandle, HiveSession> handleToSession = new ConcurrentHashMap();
   protected OperationManager operationManager = new OperationManager();
-  private ThreadPoolExecutor backgroundOperationPool;
-  private boolean isOperationLogEnabled;
-  private File operationLogRootDir;
+  protected ThreadPoolExecutor backgroundOperationPool;
+  protected boolean isOperationLogEnabled;
+  protected File operationLogRootDir;
 
   private long checkInterval;
   private long sessionTimeout;
@@ -110,7 +109,7 @@ public class SessionManager extends CompositeService {
         ConfVars.HIVE_SERVER2_IDLE_SESSION_CHECK_OPERATION);
   }
 
-  private void initOperationLogRootDir() {
+  protected void initOperationLogRootDir() {
     operationLogRootDir = new File(
         hiveConf.getVar(ConfVars.HIVE_SERVER2_LOGGING_OPERATION_LOG_LOCATION));
     isOperationLogEnabled = true;
@@ -219,7 +218,7 @@ public class SessionManager extends CompositeService {
    * The username passed to this method is the effective username.
    * If withImpersonation is true (==doAs true) we wrap all the calls in HiveSession
    * within a UGI.doAs, where UGI corresponds to the effective user.
-   * @see org.apache.hive.service.cli.thrift.ThriftCLIService#getUserName()
+   * @see org.apache.hive.service.cli.thrift.ThriftCLIService getUserName()
    *
    * @param protocol
    * @param username
@@ -235,36 +234,7 @@ public class SessionManager extends CompositeService {
       String username, String password, String ipAddress,
       Map<String, String> sessionConf, boolean withImpersonation, String delegationToken)
           throws HiveSQLException {
-    HiveSession session;
-    // If doAs is set to true for HiveServer2, we will create a proxy object for the session impl.
-    // Within the proxy object, we wrap the method call in a UserGroupInformation#doAs
-    if (withImpersonation) {
-      HiveSessionImplwithUGI sessionWithUGI =
-        new HiveSessionImplwithUGI(protocol,
-          realUser, username, password, hiveConf, ipAddress, delegationToken);
-      session = HiveSessionProxy.getProxy(sessionWithUGI, sessionWithUGI.getSessionUgi());
-      sessionWithUGI.setProxySession(session);
-    } else {
-      session = new HiveSessionImpl(protocol, realUser, username, password, hiveConf, ipAddress);
-    }
-    session.setSessionManager(this);
-    session.setOperationManager(operationManager);
-    try {
-      session.open(sessionConf);
-    } catch (Exception e) {
-      try {
-        session.close();
-      } catch (Throwable t) {
-        LOG.warn("Error closing session", t);
-      }
-      session = null;
-      throw new HiveSQLException("Failed to open new session: " + e, e);
-    }
-    if (isOperationLogEnabled) {
-      session.setOperationLogSessionDir(operationLogRootDir);
-    }
-    handleToSession.put(session.getSessionHandle(), session);
-    return session.getSessionHandle();
+    throw new HiveSQLException("Method not Implemented");
   }
 
   public void closeSession(SessionHandle sessionHandle) throws HiveSQLException {
