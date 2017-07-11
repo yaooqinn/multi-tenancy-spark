@@ -90,10 +90,10 @@ object HiveThriftServer2 extends Logging {
         System.exit(-1)
       }
 
-      if (server.isSupportDynamicServiceDiscovery(executionHive.conf)) {
+      if (server.isSupportDynamicServiceDiscovery(hiveConf)) {
         logInfo("HiveServer2 HA mode: start to add this HiveServer2 instance to Zookeeper...")
         invoke(classOf[HiveServer2], server, "addServerInstanceToZooKeeper",
-          classOf[HiveConf] -> executionHive.conf)
+          classOf[HiveConf] -> hiveConf)
       }
     } catch {
       case e: Exception =>
