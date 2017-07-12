@@ -76,4 +76,5 @@ export HADOOP_CONF_DIR="${HADOOP_CONF_DIR:-$HADOOP_HOME/etc/hadoop}"
 export SPARK_HOME="$(cd "$(dirname "$0")"/..; pwd)"
 export SPARK_PID_DIR="${SPARK_PID_DIR:-$SPARK_HOME/pid}"
 export SPARK_DAEMON_MEMORY=64g
-export SPARK_DAEMON_JAVA_OPTS="-XX:MaxPermSize=2048m -XX:MaxDirectMemorySize=1024m"
+export SPARK_DAEMON_JAVA_OPTS="-XX:MaxPermSize=2048m -XX:MaxDirectMemorySize=1024m -Dlog4j.configuration=file:${SAPRK_HOME}conf/log4j-thriftserver.properties "
+export SPARK_LOG_DIR=${SPARK_HOME}/logs
