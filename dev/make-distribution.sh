@@ -179,6 +179,8 @@ cp "$SPARK_HOME"/assembly/target/scala*/jars/* "$DISTDIR/jars/"
 if [ -d "$SPARK_HOME"/sql/ranger/target/jars ]; then
   cp "$SPARK_HOME"/sql/ranger/target/jars/* "$DISTDIR/jars/"
   rm "$DISTDIR"/jars/spark-ranger_*.jar
+  cp "$SPARK_HOME"/conf/ranger-hive-audit.xml "$DISTDIR"/conf
+  cp "$SPARK_HOME"/conf/ranger-hive-security.xml "$DISTDIR"/conf
 fi
 
 # Only create the yarn directory if the yarn artifacts were build.
@@ -247,6 +249,10 @@ fi
 # Copy other things
 mkdir "$DISTDIR"/conf
 cp "$SPARK_HOME"/conf/*.template "$DISTDIR"/conf
+cp "$SPARK_HOME"/conf/log4j.properties "$DISTDIR"/conf
+cp "$SPARK_HOME"/conf/spark-env.sh "$DISTDIR"/conf
+cp "$SPARK_HOME"/conf/spark-defaults.conf "$DISTDIR"/conf
+cp "$SPARK_HOME"/conf/hive-site.xml "$DISTDIR"/conf
 cp "$SPARK_HOME/README.md" "$DISTDIR"
 cp -r "$SPARK_HOME/bin" "$DISTDIR"
 cp -r "$SPARK_HOME/python" "$DISTDIR"

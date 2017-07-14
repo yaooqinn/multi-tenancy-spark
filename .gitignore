@@ -32,10 +32,10 @@ build/zinc*
 cache
 checkpoint
 conf/*.cmd
-conf/*.conf
-conf/*.properties
-conf/*.sh
-conf/*.xml
+conf/*.conf2
+conf/*.properties2
+conf/*.sh2
+conf/*.xml2
 conf/java-opts
 conf/slaves
 dependency-reduced-pom.xml
