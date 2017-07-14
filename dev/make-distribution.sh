@@ -250,6 +250,7 @@ cp "$SPARK_HOME"/conf/*.template "$DISTDIR"/conf
 cp "$SPARK_HOME"/conf/log4j.properties "$DISTDIR"/conf
 cp "$SPARK_HOME"/conf/spark-env.sh "$DISTDIR"/conf
 cp "$SPARK_HOME"/conf/spark-defaults.conf "$DISTDIR"/conf
+cp "$SPARK_HOME"/conf/hive-site.xml "$DISTDIR"/conf
 cp "$SPARK_HOME/README.md" "$DISTDIR"
 cp -r "$SPARK_HOME/bin" "$DISTDIR"
 cp -r "$SPARK_HOME/python" "$DISTDIR"
