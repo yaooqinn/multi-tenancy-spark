@@ -1,0 +1,193 @@
+<?xml version="1.0"?>
+<configuration>
+
+    <!-- Hive MetaStore -->
+    <property>
+        <name>javax.jdo.option.ConnectionDriverName</name>
+        <value>com.mysql.jdbc.Driver</value>
+        <description>MySQL JDBC driver class</description>
+    </property>
+
+    <property>
+        <name>javax.jdo.option.ConnectionURL</name>
+        <value>jdbcURL</value>
+        <description>
+            metadata is stored in a MySQL server
+            such as:
+            jdbc:mysql://10.172.121.127:3306/hive_cluster3?characterEncoding=utf-8&amp;useSSL=false
+        </description>
+    </property>
+
+    <property>
+        <name>javax.jdo.option.ConnectionUserName</name>
+        <value>connUser</value>
+        <description>user name for connecting to mysql server</description>
+    </property>
+
+    <property>
+        <name>javax.jdo.option.ConnectionPassword</name>
+        <value>connPassword</value>
+        <description>password for connecting to mysql server</description>
+    </property>
+
+    <property>
+        <name>hive.security.metastore.authorization.manager</name>
+        <value>org.apache.hadoop.hive.ql.security.authorization.StorageBasedAuthorizationProvider</value>
+        <description>
+            authorization manager class name to be used in the metastore for authorization.
+            The user defined authorization class should implement interface
+            org.apache.hadoop.hive.ql.security.authorization.HiveMetastoreAuthorizationProvider.
+        </description>
+    </property>
+
+    <property>
+        <name>hive.security.metastore.authenticator.manager</name>
+        <value>org.apache.hadoop.hive.ql.security.HadoopDefaultMetastoreAuthenticator</value>
+        <description>
+            authenticator manager class name to be used in the metastore for authentication.
+            The user defined authenticator should implement interface
+            org.apache.hadoop.hive.ql.security.HiveAuthenticationProvider.
+        </description>
+    </property>
+
+    <!-- Impersonate -->
+    <property>
+        <name>hadoop.proxyuser.hive.hosts</name>
+        <value>*</value>
+        <description>
+            The superuser can connect only from host1 and host2 to impersonate a user
+        </description>
+    </property>
+
+    <property>
+        <name>hadoop.proxyuser.hive.groups</name>
+        <value>*</value>
+    </property>
+
+    <property>
+        <name>hadoop.proxyuser.hadoop.hosts</name>
+        <value>*</value>
+        <description>
+            The superuser can connect only from host1 and host2 to impersonate a user
+        </description>
+    </property>
+
+    <property>
+        <name>hadoop.proxyuser.hadoop.groups</name>
+        <value>*</value>
+    </property>
+
+    <!-- Hive Server2-->
+    <property>
+        <name>hive.server2.enable.doAs</name>
+        <value>true</value>
+    </property>
+
+    <property>
+        <name>hive.server2.thrift.port</name>
+        <value>10000</value>
+    </property>
+
+    <property>
+        <name>hive.server2.authentication</name>
+        <value>KERBEROS</value>
+    </property>
+
+    <property>
+        <name>hive.security.authorization.createtable.owner.grants</name>
+        <value>ALL</value>
+        <description>
+            the privileges automatically granted to the owner whenever a table gets created.
+            An example like "select,drop" will grant select and drop privilege to the owner of the table
+        </description>
+    </property>
+
+    <property>
+        <name>hive.server2.thrift.sasl.qop</name>
+        <value>auth</value>
+    </property>
+
+    <property>
+        <name>hive.exec.scratchdir</name>
+        <value>/tmp/hive/public</value>
+    </property>
+
+    <!-- Ranger -->
+    <property>
+        <name>hive.security.authorization.enabled</name>
+        <value>true</value>
+    </property>
+    <property>
+        <name>hive.security.authorization.manager</name>
+        <value>org.apache.ranger.authorization.hive.authorizer.RangerHiveAuthorizerFactory</value>
+    </property>
+    <property>
+        <name>hive.security.authenticator.manager</name>
+        <value>org.apache.hadoop.hive.ql.security.SessionStateUserAuthenticator</value>
+    </property>
+    <property>
+        <name>hive.conf.restricted.list</name>
+        <value>
+            hive.security.authorization.enabled,hive.security.authorization.manager,hive.security.authenticator.manager
+        </value>
+    </property>
+
+    <!-- Partition Support-->
+    <property>
+        <name>hive.exec.dynamic.partition</name>
+        <value>true</value>
+    </property>
+
+    <property>
+        <name>hive.exec.dynamic.partition.mode</name>
+        <value>nonstrict</value>
+    </property>
+
+    <property>
+        <name>hive.exec.max.dynamic.partitions.pernode</name>
+        <value>10000</value>
+    </property>
+
+    <property>
+        <name>hive.exec.max.dynamic.partitions</name>
+        <value>10000</value>
+    </property>
+
+    <property>
+        <name>hive.error.on.empty.partition</name>
+        <value>true</value>
+    </property>
+
+    <!--HA -->
+    <property>
+        <name>hive.server2.support.dynamic.service.discovery</name>
+        <value>false</value>
+    </property>
+
+    <property>
+        <name>hive.server2.zookeeper.namespace</name>
+        <value>spark-thriftserver</value>
+    </property>
+
+    <property>
+        <name>hive.zookeeper.quorum</name>
+        <value></value>
+    </property>
+
+    <!--Others -->
+    <property>
+        <name>datanucleus.fixedDataStore</name>
+        <value>false</value>
+    </property>
+
+    <property>
+        <name>datanecleus.autoCreateSchema</name>
+        <value>false</value>
+    </property>
+
+    <property>
+        <name>fs.hdfs.impl.disable.cache</name>
+        <value>true</value>
+    </property>
+
+</configuration>
