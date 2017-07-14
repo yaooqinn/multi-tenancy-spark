@@ -36,7 +36,7 @@ import org.apache.spark.{CredentialCache, SparkException}
 import org.apache.spark.deploy.SparkHadoopUtil
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.SparkSession
-import org.apache.spark.sql.hive.HiveUtils
+import org.apache.spark.sql.hive.{HiveExternalCatalog, HiveUtils}
 import org.apache.spark.sql.hive.client.HiveClient
 import org.apache.spark.sql.hive.thriftserver.server.SparkSQLOperationManager
 
@@ -119,15 +119,13 @@ private[hive] class SparkSQLSessionManager(hiveServer: HiveServer2)
     val (rangerUser, _, database) = configureSession(sessionConf)
 
     val ss = getUserSession(username)
+
+    // 1. `metastoreUser` is necessary to create a client which will specify SessionState's user;
+    // 2. Reuse sharedSession's client to avoid creating a new classLoader;
+    // Warning: no use `HiveUtils.newClientForMetadata()` to avoid metastore mysql connection leaks.
     val metastoreUser = rangerUser.getOrElse(username)
-
-
-    val client = sessionUGI.doAs(new PrivilegedExceptionAction[HiveClient]() {
-      override def run(): HiveClient = HiveUtils.newClientForMetadata(
-        ss.sparkContext.conf,
-        ss.sparkContext.hadoopConfiguration,
-        metastoreUser)
-    })
+    val client = ss.sharedState.externalCatalog.asInstanceOf[HiveExternalCatalog]
+        .client.newSession(metastoreUser)
 
     ss.conf.set("spark.sql.hive.version", HiveUtils.hiveExecutionVersion)
 
