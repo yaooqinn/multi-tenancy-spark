@@ -228,7 +228,6 @@
         </dependency>
     </dependencies>
 
-
     <build>
         <outputDirectory>target/scala-${scala.binary.version}/classes</outputDirectory>
         <testOutputDirectory>target/scala-${scala.binary.version}/test-classes</testOutputDirectory>
@@ -250,7 +249,7 @@
                             <overWriteIfNewer>true</overWriteIfNewer>
                             <useSubDirectoryPerType>true</useSubDirectoryPerType>
                             <includeArtifactIds>
-                                ranger-hive-plugin,ranger-plugin-classloader,ranger-plugin-audit,ranger-plugin-common,ranger-plugin-cred,ranger_solrj,javax.persistence,eclipselink,httpmime,jersey-bundle,jersey-core,jersey-json,jersey-spring,noggit
+                                ranger-hive-plugin,ranger-plugin-classloader,ranger-plugins-audit,ranger-plugins-common,ranger-plugins-cred,ranger_solrj,javax.persistence,eclipselink,httpmime,jersey-bundle,jersey-core,jersey-json,jersey-spring,noggit
                             </includeArtifactIds>
                             <silent>true</silent>
                         </configuration>
