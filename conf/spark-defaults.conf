@@ -70,7 +70,7 @@ spark.yarn.am.waitTime                                100s
 spark.yarn.am.cores                                   4
 spark.yarn.am.memory                                  10g
 spark.yarn.am.memoryOverhead                          2048
-spark.yarn.am.extraJavaOptions                        -XX:PermSize=1024m -XX:MaxPermSize=2048m -verbose:gc -XX:+PrintGCDetails -XX:+PrintGCDateStamps -XX:+PrintTenuringDistribution
+spark.yarn.am.extraJavaOptions                        -XX:PermSize=1024m -XX:MaxPermSize=2048m -XX:MaxDirectMemorySize=512m -verbose:gc -XX:+PrintGCDetails -XX:+PrintGCDateStamps -XX:+PrintTenuringDistribution
 spark.driver.maxResultSize                            2g
 
 ## Executor Settings ##
@@ -78,7 +78,7 @@ spark.executor.instances                              0
 spark.executor.cores                                  4
 spark.executor.memory                                 20g
 spark.yarn.executor.memoryOverhead                    4096
-spark.executor.extraJavaOptions                       -XX:PermSize=1024m -XX:MaxPermSize=1024m -verbose:gc -XX:+PrintGCDetails -XX:+PrintGCDateStamps -XX:+PrintTenuringDistribution
+spark.executor.extraJavaOptions                       -XX:PermSize=1024m -XX:MaxPermSize=1024m -XX:MaxDirectMemorySize=512m -verbose:gc -XX:+PrintGCDetails -XX:+PrintGCDateStamps -XX:+PrintTenuringDistribution
 
 ## Dynamic Allocation Settings ##
 spark.shuffle.service.enabled                         true
