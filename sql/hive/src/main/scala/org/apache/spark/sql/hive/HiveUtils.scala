@@ -349,8 +349,7 @@ private[spark] object HiveUtils extends Logging {
             }
           case path =>
             new File(path) :: Nil
-        }
-          .map(_.toURI.toURL)
+        }.map(_.toURI.toURL)
 
       logInfo(
         s"Initializing HiveMetastoreConnection version $hiveMetastoreVersion " +

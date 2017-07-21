@@ -32,7 +32,7 @@ import org.apache.hive.service.cli.session.HiveSession
 
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.SparkSession
-import org.apache.spark.sql.execution.command.{AddJarCommand, SetCommand}
+import org.apache.spark.sql.execution.command.{AddJarCommand, CreateFunctionCommand, SetCommand}
 import org.apache.spark.sql.hive.HiveSessionState
 import org.apache.spark.sql.hive.client.HiveClient
 import org.apache.spark.sql.hive.thriftserver.SparkExecuteStatementOperation
@@ -64,9 +64,9 @@ private[thriftserver] class SparkSQLOperationManager()
     val plan = sessionState.sqlParser.parsePlan(statement)
 
     plan match {
-      case addJar: AddJarCommand => client.addJar(addJar.path)
-      case setCmd: SetCommand => setCmd.kv match {
-        case Some(("hivevar:ranger.user.name", Some(name))) if name != client.getCurrentUser() =>
+      case setCmd: SetCommand =>
+        setCmd.kv match {
+          case Some(("hivevar:ranger.user.name", Some(name))) if name != client.getCurrentUser() =>
           verifyChangeRangerUser(parentSession)
           val currentDatabase = client.getCurrentDatabase()
           val sessionUGI = Utils.getUGI
@@ -78,9 +78,16 @@ private[thriftserver] class SparkSQLOperationManager()
           client.setCurrentDatabase(currentDatabase)
           sessionToClient.remove(sessionHandle)
           sessionToClient.put(sessionHandle, client)
-
-        case _ =>
+          case _ =>
       }
+      case addJar: AddJarCommand =>
+        // Always use the latest class loader provided by executionHive's state.
+        val executionHiveClassLoader = sparkSession.sharedState.jarClassLoader
+        Thread.currentThread().setContextClassLoader(executionHiveClassLoader)
+        client.addJar(addJar.path)
+
+      case _: CreateFunctionCommand => client.runSqlHive(statement)
+
       case _ =>
     }
 
