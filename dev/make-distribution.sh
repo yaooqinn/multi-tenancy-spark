@@ -35,6 +35,7 @@ DISTDIR="$SPARK_HOME/dist"
 MAKE_TGZ=false
 MAKE_PIP=false
 MAKE_R=false
+RANGER=false
 NAME=none
 MVN="$SPARK_HOME/build/mvn"
 
@@ -82,6 +83,9 @@ while (( "$#" )); do
     --name)
       NAME="$2"
       shift
+      ;;
+    --ranger)
+      RANGER=true
       ;;
     --help)
       exit_with_usage
@@ -175,14 +179,6 @@ echo "Build flags: $@" >> "$DISTDIR/RELEASE"
 # Copy jars
 cp "$SPARK_HOME"/assembly/target/scala*/jars/* "$DISTDIR/jars/"
 
-# Copy ranger plugin jars
-if [ -d "$SPARK_HOME"/sql/ranger/target/jars ]; then
-  cp "$SPARK_HOME"/sql/ranger/target/jars/* "$DISTDIR/jars/"
-  rm "$DISTDIR"/jars/spark-ranger_*.jar
-  cp "$SPARK_HOME"/conf/ranger-hive-audit.xml "$DISTDIR"/conf
-  cp "$SPARK_HOME"/conf/ranger-hive-security.xml "$DISTDIR"/conf
-fi
-
 # Only create the yarn directory if the yarn artifacts were build.
 if [ -f "$SPARK_HOME"/common/network-yarn/target/scala*/spark-*-yarn-shuffle.jar ]; then
   mkdir "$DISTDIR"/yarn
@@ -249,13 +245,24 @@ fi
 # Copy other things
 mkdir "$DISTDIR"/conf
 cp "$SPARK_HOME"/conf/*.template "$DISTDIR"/conf
-cp "$SPARK_HOME"/conf/log4j.properties "$DISTDIR"/conf
-cp "$SPARK_HOME"/conf/spark-env.sh "$DISTDIR"/conf
-cp "$SPARK_HOME"/conf/spark-defaults.conf "$DISTDIR"/conf
-cp "$SPARK_HOME"/conf/hive-site.xml "$DISTDIR"/conf
 cp "$SPARK_HOME/README.md" "$DISTDIR"
 cp -r "$SPARK_HOME/bin" "$DISTDIR"
 cp -r "$SPARK_HOME/python" "$DISTDIR"
+
+# Copy ranger plugin jars
+if [ "$RANGER" == "true" ]; then
+  echo "Copying ranger jars and configs"
+  cp "$SPARK_HOME"/sql/ranger/target/jars/* "$DISTDIR/jars/"
+  cp "$SPARK_HOME"/conf/ranger-hive-audit.xml "$DISTDIR"/conf
+  cp "$SPARK_HOME"/conf/ranger-hive-security.xml "$DISTDIR"/conf
+  rm "$DISTDIR"/jars/spark-ranger_*.jar
+
+  # TODO: hzyaoqin: Currently just when enable ranger trigger these
+  cp "$SPARK_HOME"/conf/log4j.properties "$DISTDIR"/conf
+  cp "$SPARK_HOME"/conf/spark-env.sh "$DISTDIR"/conf
+  cp "$SPARK_HOME"/conf/spark-defaults.conf "$DISTDIR"/conf
+  cp "$SPARK_HOME"/conf/hive-site.xml "$DISTDIR"/conf
+fi
 
 # Remove the python distribution from dist/ if we built it
 if [ "$MAKE_PIP" == "true" ]; then
