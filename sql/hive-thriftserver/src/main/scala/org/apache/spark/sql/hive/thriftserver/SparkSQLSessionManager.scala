@@ -91,17 +91,16 @@ private[hive] class SparkSQLSessionManager(hiveServer: HiveServer2)
       withImpersonation: Boolean,
       delegationToken: String): SessionHandle = {
     var hiveSession: HiveSession = null
-    var sessionUGI: UserGroupInformation = null
+    var sessionUGI: UserGroupInformation = Utils.getUGI
     // If doAs is set to true for HiveServer2, we will create a proxy object for the session impl.
     // Within the proxy object, we wrap the method call in a UserGroupInformation#doAs
     if (withImpersonation) {
       val sessionWithUGI = new HiveSessionImplwithUGI(protocol, realUser, username,
         passwd, hiveConf, ipAddress, delegationToken)
       sessionUGI = sessionWithUGI.getSessionUgi
-      hiveSession = HiveSessionProxy.getProxy(sessionWithUGI, sessionWithUGI.getSessionUgi)
+      hiveSession = HiveSessionProxy.getProxy(sessionWithUGI, sessionUGI)
       sessionWithUGI.setProxySession(hiveSession)
     } else {
-      sessionUGI = Utils.getUGI
       hiveSession = new HiveSessionImpl(protocol, realUser, username, passwd, hiveConf, ipAddress)
     }
     hiveSession.setSessionManager(this)
@@ -118,24 +117,28 @@ private[hive] class SparkSQLSessionManager(hiveServer: HiveServer2)
 
     val (rangerUser, _, database) = configureSession(sessionConf)
 
-    val ss = getUserSession(username)
+    val sparkSession = getUserSession(username)
 
     // 1. `metastoreUser` is necessary to create a client which will specify SessionState's user;
     // 2. Reuse sharedSession's client to avoid creating a new classLoader;
     // Warning: no use `HiveUtils.newClientForMetadata()` to avoid metastore mysql connection leaks.
     val metastoreUser = rangerUser.getOrElse(username)
-    val client = ss.sharedState.externalCatalog.asInstanceOf[HiveExternalCatalog]
-        .client.newSession(metastoreUser)
+    val client = sessionUGI.doAs(new PrivilegedExceptionAction[HiveClient]() {
+      override def run(): HiveClient = {
+        sparkSession.sharedState.externalCatalog.asInstanceOf[HiveExternalCatalog]
+          .client.newSession(metastoreUser)
+      }
+    })
 
-    ss.conf.set("spark.sql.hive.version", HiveUtils.hiveExecutionVersion)
+    sparkSession.conf.set("spark.sql.hive.version", HiveUtils.hiveExecutionVersion)
 
     if (rangerUser.isDefined) {
       val statement = s"set hivevar:ranger.user.name = ${rangerUser.get}"
-      ss.sql(statement)
+      sparkSession.sql(statement)
     }
-    ss.sql(database.get)
+    sparkSession.sql(database.get)
 
-    sparkSqlOperationManager.sessionToSparkSession.put(sessionHandle, ss)
+    sparkSqlOperationManager.sessionToSparkSession.put(sessionHandle, sparkSession)
     sparkSqlOperationManager.sessionToClient.put(sessionHandle, client)
     sessionHandle
   }
