@@ -69,12 +69,16 @@
 export JAVA_HOME="${JAVA_HOME:-$HOME/java-current}"
 
 ## Default Settings For YARN
-export HADOOP_HOME="${HADOOP_HOME:-$HOME/hadoop-current}"
+export YARN_CLIENT_HOME="$YARN_CLIENT_HOME:-$HOME/yarn-current"
+export HADOOP_HOME="${YARN_CLIENT_HOME:-$HOME/hadoop-current}"
 export HADOOP_CONF_DIR="${HADOOP_CONF_DIR:-$HADOOP_HOME/etc/hadoop}"
 
 ## Default Settings For Spark
 export SPARK_HOME="$(cd "$(dirname "$0")"/..; pwd)"
 export SPARK_PID_DIR="${SPARK_PID_DIR:-$SPARK_HOME/pid}"
 export SPARK_DAEMON_MEMORY=64g
-export SPARK_DAEMON_JAVA_OPTS="-XX:MaxPermSize=2048m -XX:MaxDirectMemorySize=1024m -Dlog4j.configuration=file:${SAPRK_HOME}conf/log4j-thriftserver.properties "
+export DEFAULT_LOG4J_CONF="${SPARK_HOME/conf/log4j.properties}"
+export STS_LOG4J_CONF="${SPARK_HOME/conf/log4j-thriftserver.properties}"
+export FINAL_LOG4J_CONF="${STS_LOG4J_CONF:-$DEFAULT_LOG4J_CONF}"
+export SPARK_DAEMON_JAVA_OPTS="-XX:MaxPermSize=2048m -XX:MaxDirectMemorySize=1024m -Dlog4j.configuration=file:${FINAL_LOG4J_CONF}"
 export SPARK_LOG_DIR=${SPARK_HOME}/logs

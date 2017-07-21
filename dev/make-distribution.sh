@@ -253,15 +253,11 @@ cp -r "$SPARK_HOME/python" "$DISTDIR"
 if [ "$RANGER" == "true" ]; then
   echo "Copying ranger jars and configs"
   cp "$SPARK_HOME"/sql/ranger/target/jars/* "$DISTDIR/jars/"
-  cp "$SPARK_HOME"/conf/ranger-hive-audit.xml "$DISTDIR"/conf
-  cp "$SPARK_HOME"/conf/ranger-hive-security.xml "$DISTDIR"/conf
+
   rm "$DISTDIR"/jars/spark-ranger_*.jar
 
   # TODO: hzyaoqin: Currently just when enable ranger trigger these
-  cp "$SPARK_HOME"/conf/log4j.properties "$DISTDIR"/conf
-  cp "$SPARK_HOME"/conf/spark-env.sh "$DISTDIR"/conf
-  cp "$SPARK_HOME"/conf/spark-defaults.conf "$DISTDIR"/conf
-  cp "$SPARK_HOME"/conf/hive-site.xml "$DISTDIR"/conf
+  cp "$SPARK_HOME"/conf/*.ne "$DISTDIR"/conf
 fi
 
 # Remove the python distribution from dist/ if we built it
