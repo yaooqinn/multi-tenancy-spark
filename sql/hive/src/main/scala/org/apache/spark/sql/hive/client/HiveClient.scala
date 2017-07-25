@@ -19,6 +19,8 @@ package org.apache.spark.sql.hive.client
 
 import java.io.PrintStream
 
+import org.apache.hadoop.hive.ql.exec.FunctionInfo
+
 import org.apache.spark.sql.catalyst.analysis._
 import org.apache.spark.sql.catalyst.catalog._
 import org.apache.spark.sql.catalyst.catalog.CatalogTypes.TablePartitionSpec
@@ -285,5 +287,10 @@ private[hive] trait HiveClient {
   def getCurrentUser(): String
 
   def close(): Unit
+
+  def registerTemporaryUDF(
+      functionName: String,
+      udfClass: String,
+      resources: Seq[FunctionResource]): FunctionInfo
 
 }

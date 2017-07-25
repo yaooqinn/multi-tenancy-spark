@@ -30,9 +30,11 @@ import org.apache.hadoop.hive.metastore.{TableType => HiveTableType}
 import org.apache.hadoop.hive.metastore.api.{FieldSchema, Database => HiveDatabase}
 import org.apache.hadoop.hive.metastore.api.{SerDeInfo, StorageDescriptor}
 import org.apache.hadoop.hive.ql.Driver
+import org.apache.hadoop.hive.ql.exec.{FunctionInfo, FunctionRegistry}
 import org.apache.hadoop.hive.ql.metadata.{Hive, Partition => HivePartition, Table => HiveTable}
 import org.apache.hadoop.hive.ql.processors._
 import org.apache.hadoop.hive.ql.session.SessionState
+import org.apache.hadoop.hive.ql.session.SessionState.ResourceType
 
 import org.apache.spark.{SparkConf, SparkException}
 import org.apache.spark.internal.Logging
@@ -720,6 +722,7 @@ private[hive] class HiveClientImpl(
       uri.toURL
     }
     clientLoader.addJar(jarURL)
+    state.add_resource(ResourceType.JAR, path)
     runSqlHive(s"ADD JAR $path")
   }
 
@@ -914,6 +917,37 @@ private[hive] class HiveClientImpl(
   override def close(): Unit = withHiveState {
     state.close()
     Hive.closeCurrent()
+  }
+
+  private def add_resources(
+      resources: Seq[FunctionResource]): Seq[FunctionInfo.FunctionResource] = {
+
+    def toHiveType(resourceType: FunctionResourceType): ResourceType = {
+      resourceType match {
+        case JarResource => ResourceType.JAR
+        case ArchiveResource => ResourceType.ARCHIVE
+        case FileResource => ResourceType.FILE
+      }
+    }
+
+    val currentState = SessionState.get()
+    resources.map { res =>
+      val uri = res.uri
+      val resourceType = toHiveType(res.resourceType)
+      currentState.add_resource(resourceType, uri)
+      new FunctionInfo.FunctionResource(resourceType, uri)
+    }
+  }
+
+  override def registerTemporaryUDF(
+      functionName: String,
+      udfClass: String,
+      sparkFuncResources: Seq[FunctionResource]): FunctionInfo = withHiveState {
+    val clazz = Utils.classForName(udfClass)
+    val resource = add_resources(sparkFuncResources)
+    val funcResource = if (resource.isEmpty) null else resource.head
+
+    FunctionRegistry.registerTemporaryUDF(functionName, clazz, funcResource)
   }
 
 }
