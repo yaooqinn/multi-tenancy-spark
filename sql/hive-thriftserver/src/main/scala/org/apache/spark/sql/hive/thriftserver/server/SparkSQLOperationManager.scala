@@ -86,15 +86,12 @@ private[thriftserver] class SparkSQLOperationManager()
           case _ =>
       }
 
-      case func: CreateFunctionCommand =>
-        if (func.isTemp) {
-          if (func.databaseName.isDefined) {
-            throw new AnalysisException(s"Specifying a database in CREATE TEMPORARY FUNCTION " +
-              s"is not allowed: '${func.databaseName.get}'")
-          }
-          client.registerTemporaryUDF(
-            func.functionName, func.className, func.resources)
+      case func: CreateFunctionCommand if func.isTemp =>
+        if (func.databaseName.isDefined) {
+          throw new AnalysisException(s"Specifying a database in CREATE TEMPORARY FUNCTION " +
+            s"is not allowed: '${func.databaseName.get}'")
         }
+        client.registerTemporaryUDF(func.functionName, func.className, func.resources)
 
       case _ =>
     }
