@@ -23,9 +23,6 @@ import java.util.concurrent.ConcurrentHashMap
 
 import scala.util.{Failure, Success, Try}
 
-import org.apache.hadoop.hive.ql.exec.{FunctionInfo, FunctionRegistry}
-import org.apache.hadoop.hive.ql.session.SessionState
-import org.apache.hadoop.hive.ql.session.SessionState.ResourceType
 import org.apache.hadoop.hive.shims.Utils
 import org.apache.hadoop.security.UserGroupInformation
 import org.apache.hive.service.auth.HiveAuthFactory
@@ -35,12 +32,10 @@ import org.apache.hive.service.cli.session.HiveSession
 
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.{AnalysisException, SparkSession}
-import org.apache.spark.sql.catalyst.catalog._
-import org.apache.spark.sql.execution.command.{AddJarCommand, CreateFunctionCommand, SetCommand}
+import org.apache.spark.sql.execution.command.{CreateFunctionCommand, SetCommand}
 import org.apache.spark.sql.hive.HiveSessionState
 import org.apache.spark.sql.hive.client.HiveClient
 import org.apache.spark.sql.hive.thriftserver.SparkExecuteStatementOperation
-import org.apache.spark.util.{Utils => SparkUtils}
 
 /**
  * Executes queries using Spark SQL, and maintains a list of handles to active queries.
