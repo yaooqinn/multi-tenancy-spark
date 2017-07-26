@@ -291,6 +291,6 @@ private[hive] trait HiveClient {
   def registerTemporaryUDF(
       functionName: String,
       udfClass: String,
-      resources: Seq[FunctionResource]): FunctionInfo
+      resources: Seq[FunctionResource]): Unit
 
 }

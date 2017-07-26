@@ -919,35 +919,11 @@ private[hive] class HiveClientImpl(
     Hive.closeCurrent()
   }
 
-  private def add_resources(
-      resources: Seq[FunctionResource]): Seq[FunctionInfo.FunctionResource] = {
-
-    def toHiveType(resourceType: FunctionResourceType): ResourceType = {
-      resourceType match {
-        case JarResource => ResourceType.JAR
-        case ArchiveResource => ResourceType.ARCHIVE
-        case FileResource => ResourceType.FILE
-      }
-    }
-
-    val currentState = SessionState.get()
-    resources.map { res =>
-      val uri = res.uri
-      val resourceType = toHiveType(res.resourceType)
-      currentState.add_resource(resourceType, uri)
-      new FunctionInfo.FunctionResource(resourceType, uri)
-    }
-  }
-
   override def registerTemporaryUDF(
       functionName: String,
       udfClass: String,
-      sparkFuncResources: Seq[FunctionResource]): FunctionInfo = withHiveState {
-    val clazz = Utils.classForName(udfClass)
-    val resource = add_resources(sparkFuncResources)
-    val funcResource = if (resource.isEmpty) null else resource.head
-
-    FunctionRegistry.registerTemporaryUDF(functionName, clazz, funcResource)
+      sparkFuncResources: Seq[FunctionResource]): Unit = withHiveState {
+    FunctionRegistry.registerTemporaryUDF(functionName, Utils.classForName(udfClass), null)
   }
 
 }

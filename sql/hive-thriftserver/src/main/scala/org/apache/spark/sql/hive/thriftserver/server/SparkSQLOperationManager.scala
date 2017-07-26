@@ -85,11 +85,6 @@ private[thriftserver] class SparkSQLOperationManager()
           sessionToClient.put(sessionHandle, client)
           case _ =>
       }
-      case addJar: AddJarCommand =>
-        // Always use the latest class loader provided by executionHive's state.
-        val executionHiveClassLoader = sparkSession.sharedState.jarClassLoader
-        Thread.currentThread().setContextClassLoader(executionHiveClassLoader)
-        client.addJar(addJar.path)
 
       case func: CreateFunctionCommand =>
         if (func.isTemp) {
