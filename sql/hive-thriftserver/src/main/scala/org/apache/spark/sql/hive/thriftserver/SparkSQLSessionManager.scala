@@ -206,5 +206,4 @@ private[hive] class SparkSQLSessionManager(hiveServer: HiveServer2)
       }
     }
   }
-
 }
