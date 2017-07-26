@@ -31,7 +31,8 @@ import org.apache.hive.service.cli.operation.{ExecuteStatementOperation, Operati
 import org.apache.hive.service.cli.session.HiveSession
 
 import org.apache.spark.internal.Logging
-import org.apache.spark.sql.SparkSession
+import org.apache.spark.sql.{AnalysisException, SparkSession}
+import org.apache.spark.sql.execution.command.{CreateFunctionCommand, SetCommand}
 import org.apache.spark.sql.hive.HiveSessionState
 import org.apache.spark.sql.hive.client.HiveClient
 import org.apache.spark.sql.hive.thriftserver.SparkExecuteStatementOperation
@@ -55,37 +56,45 @@ private[thriftserver] class SparkSQLOperationManager()
     val sessionHandle = parentSession.getSessionHandle
     val sparkSession = sessionToSparkSession.get(sessionHandle)
     var client = sessionToClient.get(sessionHandle)
-    val formatted = statement.toLowerCase.split("//s+").mkString(" ")
-    if (formatted.startsWith("set hivevar:ranger.user.name")) {
-      // get ranger user name
-      val vars = formatted.split("=")
-      val rangerUser = if (vars.size > 1) {
-        vars(1)
-      } else {
-        logInfo(s"Please remove `hivevar:` to check hive variables e.g. `set ranger.user.name;`")
-        null
-      }
 
-      if (rangerUser != null && rangerUser != client.getCurrentUser()) {
-        verifyChangeRangerUser(parentSession)
-        val currentDatabase = client.getCurrentDatabase()
-        val sessionUGI = Utils.getUGI
-        client = sessionUGI.doAs(new PrivilegedExceptionAction[HiveClient]() {
-          override def run(): HiveClient = {
-            client.newSession(rangerUser)
-          }
-        })
-        client.setCurrentDatabase(currentDatabase)
-        sessionToClient.remove(sessionHandle)
-        sessionToClient.put(sessionHandle, client)
-      }
-    }
     require(sparkSession != null, s"Session sessionHandle: ${sessionHandle} has not been" +
       s" initialized or had already closed.")
+
     val sessionState = sparkSession.sessionState.asInstanceOf[HiveSessionState]
+    val plan = sessionState.sqlParser.parsePlan(statement)
+
+    plan match {
+      case setCmd: SetCommand =>
+        setCmd.kv match {
+          case Some(("hivevar:ranger.user.name", Some(name))) if name != client.getCurrentUser() =>
+          verifyChangeRangerUser(parentSession)
+          val currentDatabase = client.getCurrentDatabase()
+          val sessionUGI = Utils.getUGI
+          client = sessionUGI.doAs(new PrivilegedExceptionAction[HiveClient]() {
+            override def run(): HiveClient = {
+              client.newSession(name)
+            }
+          })
+          client.setCurrentDatabase(currentDatabase)
+          sessionToClient.remove(sessionHandle)
+          sessionToClient.put(sessionHandle, client)
+          case _ =>
+      }
+
+      case func: CreateFunctionCommand if func.isTemp =>
+        if (func.databaseName.isDefined) {
+          throw new AnalysisException(s"Specifying a database in CREATE TEMPORARY FUNCTION " +
+            s"is not allowed: '${func.databaseName.get}'")
+        }
+        client.registerTemporaryUDF(func.functionName, func.className, func.resources)
+
+      case _ =>
+    }
+
     val runInBackground = async && sessionState.hiveThriftServerAsync
     val operation = new SparkExecuteStatementOperation(
       parentSession,
+      plan,
       statement,
       client,
       confOverlay,

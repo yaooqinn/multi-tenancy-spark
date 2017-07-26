@@ -33,7 +33,6 @@ import org.apache.hive.service.cli.thrift.TProtocolVersion
 import org.apache.hive.service.server.HiveServer2
 
 import org.apache.spark.{CredentialCache, SparkException}
-import org.apache.spark.deploy.SparkHadoopUtil
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.hive.{HiveExternalCatalog, HiveUtils}
@@ -207,5 +206,4 @@ private[hive] class SparkSQLSessionManager(hiveServer: HiveServer2)
       }
     }
   }
-
 }

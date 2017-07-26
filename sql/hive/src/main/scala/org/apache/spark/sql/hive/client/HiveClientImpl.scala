@@ -27,12 +27,14 @@ import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.Path
 import org.apache.hadoop.hive.conf.HiveConf
 import org.apache.hadoop.hive.metastore.{TableType => HiveTableType}
-import org.apache.hadoop.hive.metastore.api.{FieldSchema, Database => HiveDatabase}
+import org.apache.hadoop.hive.metastore.api.{Database => HiveDatabase, FieldSchema}
 import org.apache.hadoop.hive.metastore.api.{SerDeInfo, StorageDescriptor}
 import org.apache.hadoop.hive.ql.Driver
+import org.apache.hadoop.hive.ql.exec.FunctionRegistry
 import org.apache.hadoop.hive.ql.metadata.{Hive, Partition => HivePartition, Table => HiveTable}
 import org.apache.hadoop.hive.ql.processors._
 import org.apache.hadoop.hive.ql.session.SessionState
+import org.apache.hadoop.hive.ql.session.SessionState.ResourceType
 
 import org.apache.spark.{SparkConf, SparkException}
 import org.apache.spark.internal.Logging
@@ -720,6 +722,7 @@ private[hive] class HiveClientImpl(
       uri.toURL
     }
     clientLoader.addJar(jarURL)
+    state.add_resource(ResourceType.JAR, path)
     runSqlHive(s"ADD JAR $path")
   }
 
@@ -914,6 +917,13 @@ private[hive] class HiveClientImpl(
   override def close(): Unit = withHiveState {
     state.close()
     Hive.closeCurrent()
+  }
+
+  override def registerTemporaryUDF(
+      functionName: String,
+      udfClass: String,
+      sparkFuncResources: Seq[FunctionResource]): Unit = withHiveState {
+    FunctionRegistry.registerTemporaryUDF(functionName, Utils.classForName(udfClass), null)
   }
 
 }

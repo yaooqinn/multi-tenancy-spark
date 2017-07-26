@@ -286,4 +286,10 @@ private[hive] trait HiveClient {
 
   def close(): Unit
 
+  /** register tmp udf to current state */
+  def registerTemporaryUDF(
+      functionName: String,
+      udfClass: String,
+      resources: Seq[FunctionResource]): Unit
+
 }
