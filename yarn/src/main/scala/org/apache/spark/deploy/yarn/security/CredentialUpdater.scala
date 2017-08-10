@@ -71,8 +71,6 @@ private[spark] class CredentialUpdater(
     val timeToNextUpdate = try {
       val credentialsFilePath = new Path(credentialsFile)
       val remoteFs = FileSystem.get(freshHadoopConf)
-      val cachedCreds = Option(CredentialCache.get(user)).getOrElse(new Credentials())
-      SparkHadoopUtil.get.addCurrentUserCredentials(cachedCreds)
       SparkHadoopUtil.get.listFilesSorted(
         remoteFs, credentialsFilePath.getParent,
         credentialsFilePath.getName, SparkHadoopUtil.SPARK_YARN_CREDS_TEMP_EXTENSION)

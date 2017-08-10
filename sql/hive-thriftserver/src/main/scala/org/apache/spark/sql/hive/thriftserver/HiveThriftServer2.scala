@@ -143,7 +143,6 @@ object HiveThriftServer2 extends Logging {
     }
   }
 
-
   /**
    * An inner sparkListener called in sc.stop to clean up the HiveThriftServer2
    */
@@ -152,12 +151,10 @@ object HiveThriftServer2 extends Logging {
       val conf: SparkConf) extends SparkListener {
 
     override def onApplicationEnd(applicationEnd: SparkListenerApplicationEnd): Unit = {
-      if (MultiSparkSQLEnv.userToSession.asScala.forall {
-        case ((_, ss)) => ss.sparkContext.isStopped
-      }) {
-        server.stop()
-      }
+      MultiSparkSQLEnv.userToSession.remove(applicationEnd.sparkUser)
+      if (MultiSparkSQLEnv.userToSession.size() == 0) server.stop()
     }
+
     private var onlineSessionNum: Int = 0
     private val sessionList = new mutable.LinkedHashMap[String, SessionInfo]
     private val executionList = new mutable.LinkedHashMap[String, ExecutionInfo]

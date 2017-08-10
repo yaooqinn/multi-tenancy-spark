@@ -50,7 +50,7 @@ class ReplayListenerSuite extends SparkFunSuite with BeforeAndAfter with LocalSp
     val writer = new PrintWriter(fstream)
     val applicationStart = SparkListenerApplicationStart("Greatest App (N)ever", None,
       125L, "Mickey", None)
-    val applicationEnd = SparkListenerApplicationEnd(1000L)
+    val applicationEnd = SparkListenerApplicationEnd(1000L, "Mickey")
     // scalastyle:off println
     writer.println(compact(render(JsonProtocol.sparkEventToJson(applicationStart))))
     writer.println(compact(render(JsonProtocol.sparkEventToJson(applicationEnd))))
