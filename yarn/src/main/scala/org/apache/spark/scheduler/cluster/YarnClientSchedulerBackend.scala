@@ -36,7 +36,7 @@ private[spark] class YarnClientSchedulerBackend(
   private var client: Client = null
   private var monitorThread: MonitorThread = null
 
-  private val sparkUser = sc.sparkUser
+  private val sparkUser = sc._sparkUser
 
   /**
    * Create a Yarn client to submit an application to the ResourceManager.

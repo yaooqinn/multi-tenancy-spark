@@ -63,7 +63,7 @@ private[spark] class TaskSetManager(
   val maxResultSize = Utils.getMaxResultSize(conf)
 
   // Serializer for closures and tasks.
-  val env = SparkEnv.get(sched.sc.sparkUser)
+  val env = SparkEnv.get(sched.sc._sparkUser)
   val ser = env.closureSerializer.newInstance()
 
   val tasks = taskSet.tasks

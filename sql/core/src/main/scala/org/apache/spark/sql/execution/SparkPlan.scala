@@ -36,7 +36,7 @@ import org.apache.spark.sql.catalyst.plans.QueryPlan
 import org.apache.spark.sql.catalyst.plans.physical._
 import org.apache.spark.sql.execution.metric.SQLMetric
 import org.apache.spark.sql.types.DataType
-import org.apache.spark.util.ThreadUtils
+import org.apache.spark.util.{ThreadUtils, Utils}
 
 /**
  * The base class for physical operators.
@@ -45,13 +45,14 @@ import org.apache.spark.util.ThreadUtils
  */
 abstract class SparkPlan extends QueryPlan[SparkPlan] with Logging with Serializable {
 
+  def user: String = Utils.getCurrentUserName()
   /**
    * A handle to the SQL Context that was used to create this plan.   Since many operators need
    * access to the sqlContext for RDD operations or configuration this field is automatically
    * populated by the query planning infrastructure.
    */
   @transient
-  final val sqlContext = SparkSession.getActiveSession.map(_.sqlContext).orNull
+  final val sqlContext = SparkSession.getActiveSession(user).map(_.sqlContext).orNull
 
   protected def sparkContext = sqlContext.sparkContext
 
@@ -384,7 +385,9 @@ object SparkPlan {
 }
 
 trait LeafExecNode extends SparkPlan {
+
   override final def children: Seq[SparkPlan] = Nil
+
   override def producedAttributes: AttributeSet = outputSet
 }
 
@@ -396,12 +399,17 @@ object UnaryExecNode {
 }
 
 trait UnaryExecNode extends SparkPlan {
+
+  override def user: String = child.user
+
   def child: SparkPlan
 
   override final def children: Seq[SparkPlan] = child :: Nil
 }
 
 trait BinaryExecNode extends SparkPlan {
+
+  override def user: String = left.user
   def left: SparkPlan
   def right: SparkPlan
 

@@ -50,7 +50,7 @@ class MesosFineGrainedSchedulerBackendSuite
 
     val sc = mock[SparkContext]
     when(sc.conf).thenReturn(conf)
-    when(sc.sparkUser).thenReturn("sparkUser1")
+    when(sc._sparkUser).thenReturn("sparkUser1")
     when(sc.appName).thenReturn("appName1")
 
     val taskScheduler = mock[TaskSchedulerImpl]

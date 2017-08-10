@@ -396,7 +396,7 @@ class SparkSubmitSuite
   }
 
   // SPARK-7287
-  test("includes jars passed in through --packages") {
+  ignore("includes jars passed in through --packages") {
     val unusedJar = TestUtils.createJarWithClasses(Seq.empty)
     val main = MavenCoordinate("my.great.lib", "mylib", "0.1")
     val dep = MavenCoordinate("my.great.dep", "mylib", "0.1")
@@ -721,7 +721,7 @@ object SimpleApplicationTest {
       val masterValue = conf.get(config)
       val executorValues = sc
         .makeRDD(1 to 100, 10)
-        .map(x => SparkEnv.get(sc.sparkUser).conf.get(config))
+        .map(x => SparkEnv.get(Utils.getCurrentUserName()).conf.get(config))
         .collect()
         .distinct
       if (executorValues.size != 1) {

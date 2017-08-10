@@ -72,7 +72,8 @@ abstract class InputDStream[T: ClassTag](_ssc: StreamingContext)
    * If an outer scope is given, we assume that it includes an alternative name for this stream.
    */
   protected[streaming] override val baseScope: Option[String] = {
-    val scopeName = Option(ssc.sc.getLocalProperty(SparkContext.RDD_SCOPE_KEY))
+    val scopeName = Option(
+      ssc.sc.getLocalProperty(SparkContext.RDD_SCOPE_KEY + ssc.sparkContext.sparkUser))
       .map { json => RDDOperationScope.fromJson(json).name + s" [$id]" }
       .getOrElse(name.toLowerCase)
     Some(new RDDOperationScope(scopeName).toJson)

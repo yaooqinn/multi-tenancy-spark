@@ -28,7 +28,8 @@ import org.apache.spark.sql.execution.metric.SQLMetrics
  */
 case class LocalTableScanExec(
     output: Seq[Attribute],
-    rows: Seq[InternalRow]) extends LeafExecNode {
+    rows: Seq[InternalRow],
+    override val user: String) extends LeafExecNode {
 
   override lazy val metrics = Map(
     "numOutputRows" -> SQLMetrics.createMetric(sparkContext, "number of output rows"))

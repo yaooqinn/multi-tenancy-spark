@@ -113,7 +113,6 @@ private[thriftserver] class SparkSessionManager extends Logging {
       val maybeAppName = conf.getOption("spark.app.name")
         .filterNot(_ == classOf[SparkSQLCLIDriver].getName)
       conf.set("spark.yarn.queue", queue)
-      conf.set("spark.driver.allowMultipleContexts", "true")
       conf.setAppName(maybeAppName.getOrElse(s"SPARK-SQL::$user::$queue"))
       val proxyUser = SparkHadoopUtil.get.createProxyUser(user)
       try {

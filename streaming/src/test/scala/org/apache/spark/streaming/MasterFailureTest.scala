@@ -87,7 +87,7 @@ object MasterFailureTest extends Logging {
 
   def testUpdateStateByKey(directory: String, numBatches: Int, batchDuration: Duration) {
     // Input: time=1 ==> [ a ] , time=2 ==> [ a, a ] , time=3 ==> [ a, a, a ] , ...
-    val input = (1 to numBatches).map(i => (1 to i).map(_ => "a").mkString(" ")).toSeq
+    val input = (1 to numBatches).map(i => (1 to i).map(_ => "a").mkString(" "))
     // Expected output: time=1 ==> [ (a, 1) ] , time=2 ==> [ (a, 3) ] , time=3 ==> [ (a,6) ] , ...
     val expectedOutput = (1L to numBatches).map(i => (1L to i).sum).map(j => ("a", j))
 
@@ -329,7 +329,7 @@ class KillingThread(ssc: StreamingContext, maxKillWaitTime: Long) extends Thread
   override def run() {
     try {
       // If it is the first killing, then allow the first checkpoint to be created
-      var minKillWaitTime = if (MasterFailureTest.killCount == 0) 5000 else 2000
+      val minKillWaitTime = if (MasterFailureTest.killCount == 0) 5000 else 2000
       val killWaitTime = minKillWaitTime + math.abs(Random.nextLong % maxKillWaitTime)
       logInfo("Kill wait time = " + killWaitTime)
       Thread.sleep(killWaitTime)

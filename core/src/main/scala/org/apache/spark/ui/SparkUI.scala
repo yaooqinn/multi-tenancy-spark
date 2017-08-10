@@ -200,7 +200,12 @@ private[spark] object SparkUI {
       startTime: Long): SparkUI = {
 
     val _jobProgressListener: JobProgressListener = jobProgressListener.getOrElse {
-      val listener = new JobProgressListener(conf)
+      val user = sc match {
+        case Some(sparkContext) => sparkContext.sparkUser
+        case _ => Utils.getCurrentUserName()
+      }
+
+      val listener = new JobProgressListener(conf, user)
       listenerBus.addListener(listener)
       listener
     }

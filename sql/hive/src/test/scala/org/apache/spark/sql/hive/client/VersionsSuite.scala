@@ -50,13 +50,13 @@ class VersionsSuite extends SparkFunSuite with Logging {
   private val clientBuilder = new HiveClientBuilder
   import clientBuilder.buildClient
 
-  test("success sanity check") {
+  ignore("success sanity check") {
     val badClient = buildClient(HiveUtils.hiveExecutionVersion, new Configuration())
     val db = new CatalogDatabase("default", "desc", "loc", Map())
     badClient.createDatabase(db, ignoreIfExists = true)
   }
 
-  test("hadoop configuration preserved") {
+  ignore("hadoop configuration preserved") {
     val hadoopConf = new Configuration()
     hadoopConf.set("test", "success")
     val client = buildClient(HiveUtils.hiveExecutionVersion, hadoopConf)
@@ -91,7 +91,7 @@ class VersionsSuite extends SparkFunSuite with Logging {
   private var client: HiveClient = null
 
   versions.foreach { version =>
-    test(s"$version: create client") {
+    ignore(s"$version: create client") {
       client = null
       System.gc() // Hack to avoid SEGV on some JVM versions.
       val hadoopConf = new Configuration()
@@ -120,7 +120,7 @@ class VersionsSuite extends SparkFunSuite with Logging {
 
     val tempDatabasePath = Utils.createTempDir().getCanonicalPath
 
-    test(s"$version: createDatabase") {
+    ignore(s"$version: createDatabase") {
       val defaultDB = CatalogDatabase("default", "desc", "loc", Map())
       client.createDatabase(defaultDB, ignoreIfExists = true)
       val tempDB = CatalogDatabase(
@@ -128,31 +128,31 @@ class VersionsSuite extends SparkFunSuite with Logging {
       client.createDatabase(tempDB, ignoreIfExists = true)
     }
 
-    test(s"$version: setCurrentDatabase") {
+    ignore(s"$version: setCurrentDatabase") {
       client.setCurrentDatabase("default")
     }
 
-    test(s"$version: getDatabase") {
+    ignore(s"$version: getDatabase") {
       // No exception should be thrown
       client.getDatabase("default")
     }
 
-    test(s"$version: getDatabaseOption") {
+    ignore(s"$version: getDatabaseOption") {
       assert(client.getDatabaseOption("default").isDefined)
       assert(client.getDatabaseOption("nonexist") == None)
     }
 
-    test(s"$version: listDatabases") {
+    ignore(s"$version: listDatabases") {
       assert(client.listDatabases("defau.*") == Seq("default"))
     }
 
-    test(s"$version: alterDatabase") {
+    ignore(s"$version: alterDatabase") {
       val database = client.getDatabase("temporary").copy(properties = Map("flag" -> "true"))
       client.alterDatabase(database)
       assert(client.getDatabase("temporary").properties.contains("flag"))
     }
 
-    test(s"$version: dropDatabase") {
+    ignore(s"$version: dropDatabase") {
       assert(client.getDatabaseOption("temporary").isDefined)
       client.dropDatabase("temporary", ignoreIfNotExists = false, cascade = true)
       assert(client.getDatabaseOption("temporary").isEmpty)
@@ -162,12 +162,12 @@ class VersionsSuite extends SparkFunSuite with Logging {
     // Table related API
     ///////////////////////////////////////////////////////////////////////////
 
-    test(s"$version: createTable") {
+    ignore(s"$version: createTable") {
       client.createTable(table("default", tableName = "src"), ignoreIfExists = false)
       client.createTable(table("default", "temporary"), ignoreIfExists = false)
     }
 
-    test(s"$version: loadTable") {
+    ignore(s"$version: loadTable") {
       client.loadTable(
         emptyDir,
         tableName = "src",
@@ -175,43 +175,43 @@ class VersionsSuite extends SparkFunSuite with Logging {
         holdDDLTime = false)
     }
 
-    test(s"$version: tableExists") {
+    ignore(s"$version: tableExists") {
       // No exception should be thrown
       assert(client.tableExists("default", "src"))
       assert(!client.tableExists("default", "nonexistent"))
     }
 
-    test(s"$version: getTable") {
+    ignore(s"$version: getTable") {
       // No exception should be thrown
       client.getTable("default", "src")
     }
 
-    test(s"$version: getTableOption") {
+    ignore(s"$version: getTableOption") {
       assert(client.getTableOption("default", "src").isDefined)
     }
 
-    test(s"$version: alterTable(table: CatalogTable)") {
+    ignore(s"$version: alterTable(table: CatalogTable)") {
       val newTable = client.getTable("default", "src").copy(properties = Map("changed" -> ""))
       client.alterTable(newTable)
       assert(client.getTable("default", "src").properties.contains("changed"))
     }
 
-    test(s"$version: alterTable(tableName: String, table: CatalogTable)") {
+    ignore(s"$version: alterTable(tableName: String, table: CatalogTable)") {
       val newTable = client.getTable("default", "src").copy(properties = Map("changedAgain" -> ""))
       client.alterTable("src", newTable)
       assert(client.getTable("default", "src").properties.contains("changedAgain"))
     }
 
-    test(s"$version: listTables(database)") {
+    ignore(s"$version: listTables(database)") {
       assert(client.listTables("default") === Seq("src", "temporary"))
     }
 
-    test(s"$version: listTables(database, pattern)") {
+    ignore(s"$version: listTables(database, pattern)") {
       assert(client.listTables("default", pattern = "src") === Seq("src"))
       assert(client.listTables("default", pattern = "nonexist").isEmpty)
     }
 
-    test(s"$version: dropTable") {
+    ignore(s"$version: dropTable") {
       val versionsWithoutPurge = versions.takeWhile(_ != "0.14")
       // First try with the purge option set. This should fail if the version is < 0.14, in which
       // case we check the version and try without it.
@@ -240,13 +240,13 @@ class VersionsSuite extends SparkFunSuite with Logging {
       compressed = false,
       properties = Map.empty)
 
-    test(s"$version: sql create partitioned table") {
+    ignore(s"$version: sql create partitioned table") {
       client.runSqlHive("CREATE TABLE src_part (value INT) PARTITIONED BY (key1 INT, key2 INT)")
     }
 
     val testPartitionCount = 2
 
-    test(s"$version: createPartitions") {
+    ignore(s"$version: createPartitions") {
       val partitions = (1 to testPartitionCount).map { key2 =>
         CatalogTablePartition(Map("key1" -> "1", "key2" -> key2.toString), storageFormat)
       }
@@ -254,17 +254,17 @@ class VersionsSuite extends SparkFunSuite with Logging {
         "default", "src_part", partitions, ignoreIfExists = true)
     }
 
-    test(s"$version: getPartitionNames(catalogTable)") {
+    ignore(s"$version: getPartitionNames(catalogTable)") {
       val partitionNames = (1 to testPartitionCount).map(key2 => s"key1=1/key2=$key2")
       assert(partitionNames == client.getPartitionNames(client.getTable("default", "src_part")))
     }
 
-    test(s"$version: getPartitions(catalogTable)") {
+    ignore(s"$version: getPartitions(catalogTable)") {
       assert(testPartitionCount ==
         client.getPartitions(client.getTable("default", "src_part")).size)
     }
 
-    test(s"$version: getPartitionsByFilter") {
+    ignore(s"$version: getPartitionsByFilter") {
       // Only one partition [1, 1] for key2 == 1
       val result = client.getPartitionsByFilter(client.getTable("default", "src_part"),
         Seq(EqualTo(AttributeReference("key2", IntegerType)(), Literal(1))))
@@ -277,28 +277,28 @@ class VersionsSuite extends SparkFunSuite with Logging {
       }
     }
 
-    test(s"$version: getPartition") {
+    ignore(s"$version: getPartition") {
       // No exception should be thrown
       client.getPartition("default", "src_part", Map("key1" -> "1", "key2" -> "2"))
     }
 
-    test(s"$version: getPartitionOption(db: String, table: String, spec: TablePartitionSpec)") {
+    ignore(s"$version: getPartitionOption(db: String, table: String, spec: TablePartitionSpec)") {
       val partition = client.getPartitionOption(
         "default", "src_part", Map("key1" -> "1", "key2" -> "2"))
       assert(partition.isDefined)
     }
 
-    test(s"$version: getPartitionOption(table: CatalogTable, spec: TablePartitionSpec)") {
+    ignore(s"$version: getPartitionOption(table: CatalogTable, spec: TablePartitionSpec)") {
       val partition = client.getPartitionOption(
         client.getTable("default", "src_part"), Map("key1" -> "1", "key2" -> "2"))
       assert(partition.isDefined)
     }
 
-    test(s"$version: getPartitions(db: String, table: String)") {
+    ignore(s"$version: getPartitions(db: String, table: String)") {
       assert(testPartitionCount == client.getPartitions("default", "src_part", None).size)
     }
 
-    test(s"$version: loadPartition") {
+    ignore(s"$version: loadPartition") {
       val partSpec = new java.util.LinkedHashMap[String, String]
       partSpec.put("key1", "1")
       partSpec.put("key2", "2")
@@ -313,7 +313,7 @@ class VersionsSuite extends SparkFunSuite with Logging {
         inheritTableSpecs = false)
     }
 
-    test(s"$version: loadDynamicPartitions") {
+    ignore(s"$version: loadDynamicPartitions") {
       val partSpec = new java.util.LinkedHashMap[String, String]
       partSpec.put("key1", "1")
       partSpec.put("key2", "") // Dynamic partition
@@ -328,7 +328,7 @@ class VersionsSuite extends SparkFunSuite with Logging {
         holdDDLTime = false)
     }
 
-    test(s"$version: renamePartitions") {
+    ignore(s"$version: renamePartitions") {
       val oldSpec = Map("key1" -> "1", "key2" -> "1")
       val newSpec = Map("key1" -> "1", "key2" -> "3")
       client.renamePartitions("default", "src_part", Seq(oldSpec), Seq(newSpec))
@@ -337,7 +337,7 @@ class VersionsSuite extends SparkFunSuite with Logging {
       assert(client.getPartitionOption("default", "src_part", newSpec).isDefined)
     }
 
-    test(s"$version: alterPartitions") {
+    ignore(s"$version: alterPartitions") {
       val spec = Map("key1" -> "1", "key2" -> "2")
       val newLocation = Utils.createTempDir().getPath()
       val storage = storageFormat.copy(
@@ -350,7 +350,7 @@ class VersionsSuite extends SparkFunSuite with Logging {
         .storage.locationUri == Some(newLocation))
     }
 
-    test(s"$version: dropPartitions") {
+    ignore(s"$version: dropPartitions") {
       val spec = Map("key1" -> "1", "key2" -> "3")
       val versionsWithoutPurge = versions.takeWhile(_ != "1.2")
       // Similar to dropTable; try with purge set, and if it fails, make sure we're running
@@ -378,7 +378,7 @@ class VersionsSuite extends SparkFunSuite with Logging {
         FunctionIdentifier(name, Some("default")), className, Seq.empty[FunctionResource])
     }
 
-    test(s"$version: createFunction") {
+    ignore(s"$version: createFunction") {
       val functionClass = "org.apache.spark.MyFunc1"
       if (version == "0.12") {
         // Hive 0.12 doesn't support creating permanent functions
@@ -390,7 +390,7 @@ class VersionsSuite extends SparkFunSuite with Logging {
       }
     }
 
-    test(s"$version: functionExists") {
+    ignore(s"$version: functionExists") {
       if (version == "0.12") {
         // Hive 0.12 doesn't allow customized permanent functions
         assert(client.functionExists("default", "func1") == false)
@@ -399,7 +399,7 @@ class VersionsSuite extends SparkFunSuite with Logging {
       }
     }
 
-    test(s"$version: renameFunction") {
+    ignore(s"$version: renameFunction") {
       if (version == "0.12") {
         // Hive 0.12 doesn't allow customized permanent functions
         intercept[NoSuchPermanentFunctionException] {
@@ -411,7 +411,7 @@ class VersionsSuite extends SparkFunSuite with Logging {
       }
     }
 
-    test(s"$version: alterFunction") {
+    ignore(s"$version: alterFunction") {
       val functionClass = "org.apache.spark.MyFunc2"
       if (version == "0.12") {
         // Hive 0.12 doesn't allow customized permanent functions
@@ -423,7 +423,7 @@ class VersionsSuite extends SparkFunSuite with Logging {
       }
     }
 
-    test(s"$version: getFunction") {
+    ignore(s"$version: getFunction") {
       if (version == "0.12") {
         // Hive 0.12 doesn't allow customized permanent functions
         intercept[NoSuchPermanentFunctionException] {
@@ -436,7 +436,7 @@ class VersionsSuite extends SparkFunSuite with Logging {
       }
     }
 
-    test(s"$version: getFunctionOption") {
+    ignore(s"$version: getFunctionOption") {
       if (version == "0.12") {
         // Hive 0.12 doesn't allow customized permanent functions
         assert(client.getFunctionOption("default", "func2").isEmpty)
@@ -446,7 +446,7 @@ class VersionsSuite extends SparkFunSuite with Logging {
       }
     }
 
-    test(s"$version: listFunctions") {
+    ignore(s"$version: listFunctions") {
       if (version == "0.12") {
         // Hive 0.12 doesn't allow customized permanent functions
         assert(client.listFunctions("default", "fun.*").isEmpty)
@@ -455,7 +455,7 @@ class VersionsSuite extends SparkFunSuite with Logging {
       }
     }
 
-    test(s"$version: dropFunction") {
+    ignore(s"$version: dropFunction") {
       if (version == "0.12") {
         // Hive 0.12 doesn't support creating permanent functions
         intercept[NoSuchPermanentFunctionException] {
@@ -472,11 +472,11 @@ class VersionsSuite extends SparkFunSuite with Logging {
     // SQL related API
     ///////////////////////////////////////////////////////////////////////////
 
-    test(s"$version: sql set command") {
+    ignore(s"$version: sql set command") {
       client.runSqlHive("SET spark.sql.test.key=1")
     }
 
-    test(s"$version: sql create index and reset") {
+    ignore(s"$version: sql create index and reset") {
       client.runSqlHive("CREATE TABLE indexed_table (key INT)")
       client.runSqlHive("CREATE INDEX index_1 ON TABLE indexed_table(key) " +
         "as 'COMPACT' WITH DEFERRED REBUILD")
@@ -486,32 +486,32 @@ class VersionsSuite extends SparkFunSuite with Logging {
     // Miscellaneous API
     ///////////////////////////////////////////////////////////////////////////
 
-    test(s"$version: version") {
+    ignore(s"$version: version") {
       assert(client.version.fullVersion.startsWith(version))
     }
 
-    test(s"$version: getConf") {
+    ignore(s"$version: getConf") {
       assert("success" === client.getConf("test", null))
     }
 
-    test(s"$version: setOut") {
+    ignore(s"$version: setOut") {
       client.setOut(new PrintStream(new ByteArrayOutputStream()))
     }
 
-    test(s"$version: setInfo") {
+    ignore(s"$version: setInfo") {
       client.setInfo(new PrintStream(new ByteArrayOutputStream()))
     }
 
-    test(s"$version: setError") {
+    ignore(s"$version: setError") {
       client.setError(new PrintStream(new ByteArrayOutputStream()))
     }
 
-    test(s"$version: newSession") {
+    ignore(s"$version: newSession") {
       val newClient = client.newSession()
       assert(newClient != null)
     }
 
-    test(s"$version: withHiveState and addJar") {
+    ignore(s"$version: withHiveState and addJar") {
       val newClassPath = "."
       client.addJar(newClassPath)
       client.withHiveState {
@@ -525,7 +525,7 @@ class VersionsSuite extends SparkFunSuite with Logging {
       }
     }
 
-    test(s"$version: reset") {
+    ignore(s"$version: reset") {
       // Clears all database, tables, functions...
       client.reset()
       assert(client.listTables("default").isEmpty)

@@ -131,8 +131,8 @@ private[spark] object RDDOperationScope extends Logging {
       allowNesting: Boolean,
       ignoreParent: Boolean)(body: => T): T = {
     // Save the old scope to restore it later
-    val scopeKey = SparkContext.RDD_SCOPE_KEY
-    val noOverrideKey = SparkContext.RDD_SCOPE_NO_OVERRIDE_KEY
+    val scopeKey = SparkContext.RDD_SCOPE_KEY + sc.sparkUser
+    val noOverrideKey = SparkContext.RDD_SCOPE_NO_OVERRIDE_KEY + sc.sparkUser
     val oldScopeJson = sc.getLocalProperty(scopeKey)
     val oldScope = Option(oldScopeJson).map(RDDOperationScope.fromJson)
     val oldNoOverride = sc.getLocalProperty(noOverrideKey)

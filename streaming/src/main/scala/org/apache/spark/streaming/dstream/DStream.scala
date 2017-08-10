@@ -125,7 +125,7 @@ abstract class DStream[T: ClassTag] (
    * This is not defined if the DStream is created outside of one of the public DStream operations.
    */
   protected[streaming] val baseScope: Option[String] = {
-    Option(ssc.sc.getLocalProperty(SparkContext.RDD_SCOPE_KEY))
+    Option(ssc.sc.getLocalProperty(SparkContext.RDD_SCOPE_KEY + ssc.sc.sparkUser))
   }
 
   /**
@@ -373,8 +373,8 @@ abstract class DStream[T: ClassTag] (
   protected[streaming] def createRDDWithLocalProperties[U](
       time: Time,
       displayInnerRDDOps: Boolean)(body: => U): U = {
-    val scopeKey = SparkContext.RDD_SCOPE_KEY
-    val scopeNoOverrideKey = SparkContext.RDD_SCOPE_NO_OVERRIDE_KEY
+    val scopeKey = SparkContext.RDD_SCOPE_KEY + ssc.sparkContext.sparkUser
+    val scopeNoOverrideKey = SparkContext.RDD_SCOPE_NO_OVERRIDE_KEY + ssc.sparkContext.sparkUser
     // Pass this DStream's operation scope and creation site information to RDDs through
     // thread-local properties in our SparkContext. Since this method may be called from another
     // DStream, we need to temporarily store any old scope and creation site information to

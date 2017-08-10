@@ -247,7 +247,7 @@ class FailureSuite extends SparkFunSuite with LocalSparkContext {
     val rdd = sc.parallelize(1 to 2, 2).persist(StorageLevel.DISK_ONLY)
     rdd.count()
     // Directly delete all files from the disk store, triggering failures when reading cached data:
-    SparkEnv.get(sc.sparkUser).blockManager.diskBlockManager.getAllFiles().foreach(_.delete())
+    SparkEnv.get(sc._sparkUser).blockManager.diskBlockManager.getAllFiles().foreach(_.delete())
     // Each task should fail once due to missing cached data, but then should succeed on its second
     // attempt because the missing cache locations will be purged and the blocks will be recomputed.
     rdd.count()

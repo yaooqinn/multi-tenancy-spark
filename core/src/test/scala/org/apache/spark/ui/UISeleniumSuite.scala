@@ -40,6 +40,7 @@ import org.apache.spark.api.java.StorageLevels
 import org.apache.spark.deploy.history.HistoryServerSuite
 import org.apache.spark.shuffle.FetchFailedException
 import org.apache.spark.status.api.v1.{JacksonMessageWriter, StageStatus}
+import org.apache.spark.util.Utils
 
 private[spark] class SparkUICssErrorHandler extends DefaultCssErrorHandler {
 
@@ -270,7 +271,8 @@ class UISeleniumSuite extends SparkFunSuite with WebBrowser with Matchers with B
         val taskContext = TaskContext.get
         if (taskContext.taskAttemptId() == 1) {
           // Cause the post-shuffle stage to fail on its first attempt with a single task failure
-          val env = SparkEnv.get(sc.sparkUser)
+          val user = Utils.getCurrentUserName()
+          val env = SparkEnv.get(user)
           val bmAddress = env.blockManager.blockManagerId
           val shuffleId = shuffleHandle.shuffleId
           val mapId = 0

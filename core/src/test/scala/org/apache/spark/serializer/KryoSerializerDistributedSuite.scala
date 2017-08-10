@@ -39,7 +39,7 @@ class KryoSerializerDistributedSuite extends SparkFunSuite with LocalSparkContex
     sc = new SparkContext("local-cluster[2,1,1024]", "test", conf)
     val original = Thread.currentThread.getContextClassLoader
     val loader = new java.net.URLClassLoader(Array(jar), Utils.getContextOrSparkClassLoader)
-    SparkEnv.get(sc.sparkUser).serializer.setDefaultClassLoader(loader)
+    SparkEnv.get(sc._sparkUser).serializer.setDefaultClassLoader(loader)
 
     val cachedRDD = sc.parallelize((0 until 10).map((_, new MyCustomClass)), 3).cache()
 

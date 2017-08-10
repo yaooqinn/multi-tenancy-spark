@@ -331,8 +331,9 @@ abstract class RDD[T: ClassTag](
     val blockId = RDDBlockId(id, partition.index)
     var readCachedBlock = true
     // This method is called on executors, so we need call SparkEnv.get instead of sc.env.
+    val user = Utils.getCurrentUserName()
     SparkEnv
-      .get(sc.sparkUser)
+      .get(user)
       .blockManager
       .getOrElseUpdate(blockId, storageLevel, elementClassTag, () => {
       readCachedBlock = false
@@ -1661,7 +1662,8 @@ abstract class RDD[T: ClassTag](
    * user instantiates this RDD himself without using any Spark operations.
    */
   @transient private[spark] val scope: Option[RDDOperationScope] = {
-    Option(sc.getLocalProperty(SparkContext.RDD_SCOPE_KEY)).map(RDDOperationScope.fromJson)
+    Option(sc.getLocalProperty(SparkContext.RDD_SCOPE_KEY + sc.sparkUser))
+      .map(RDDOperationScope.fromJson)
   }
 
   private[spark] def getCreationSite: String = Option(creationSite).map(_.shortForm).getOrElse("")

@@ -38,17 +38,28 @@ class SparkContextSuite extends SparkFunSuite with LocalSparkContext {
   test("Only one SparkContext may be active at a time") {
     // Regression test for SPARK-4180
     val conf = new SparkConf().setAppName("test").setMaster("local")
-      .set("spark.driver.allowMultipleContexts", "false")
     sc = new SparkContext(conf)
-    val envBefore = SparkEnv.get(sc.sparkUser)
+    val envBefore = SparkEnv.get(sc._sparkUser)
     // A SparkContext is already running, so we shouldn't be able to create a second one
     intercept[SparkException] { new SparkContext(conf) }
-    val envAfter = SparkEnv.get(sc.sparkUser)
+    val envAfter = SparkEnv.get(sc._sparkUser)
     // SparkEnv and other context variables should be the same
     assert(envBefore == envAfter)
     // After stopping the running context, we should be able to create a new one
     resetSparkContext()
     sc = new SparkContext(conf)
+  }
+
+  test("Multiple SparkContexts started via different users are OK") {
+    val conf = new SparkConf().setMaster("local").setAppName("test")
+    val sc1 = new SparkContext(conf, Some("user1"))
+    val sc2 = new SparkContext(conf, Some("user2"))
+
+    assert(sc1 !== sc2)
+    assert(sc1.sparkUser === "user1")
+    assert(sc2.sparkUser === "user2")
+    sc1.stop()
+    sc2.stop()
   }
 
   test("Can still construct a new SparkContext after failing to construct a previous one") {
@@ -61,11 +72,10 @@ class SparkContextSuite extends SparkFunSuite with LocalSparkContext {
     sc = new SparkContext(conf.setMaster("local").setAppName("test"))
   }
 
-  test("Check for multiple SparkContexts can be disabled via undocumented debug option") {
+  ignore("Check for multiple SparkContexts can be disabled via undocumented debug option") {
     var secondSparkContext: SparkContext = null
     try {
       val conf = new SparkConf().setAppName("test").setMaster("local")
-        .set("spark.driver.allowMultipleContexts", "true")
       sc = new SparkContext(conf)
       secondSparkContext = new SparkContext(conf)
     } finally {
@@ -75,7 +85,7 @@ class SparkContextSuite extends SparkFunSuite with LocalSparkContext {
 
   test("Test getOrCreate") {
     var sc2: SparkContext = null
-    SparkContext.clearActiveContext()
+    SparkContext.clearActiveContext(Utils.getCurrentUserName())
     val conf = new SparkConf().setAppName("test").setMaster("local")
 
     sc = SparkContext.getOrCreate(conf)
@@ -87,9 +97,9 @@ class SparkContextSuite extends SparkFunSuite with LocalSparkContext {
     assert(sc eq sc2)
 
     // Try creating second context to confirm that it's still possible, if desired
-    sc2 = new SparkContext(new SparkConf().setAppName("test3").setMaster("local")
-        .set("spark.driver.allowMultipleContexts", "true"))
-
+    sc2 = new SparkContext(new SparkConf().setAppName("test3").setMaster("local"), Some("testUser"))
+    assert(sc !== sc2)
+    assert(sc ne sc2)
     sc2.stop()
   }
 

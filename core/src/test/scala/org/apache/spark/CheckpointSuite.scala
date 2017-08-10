@@ -349,7 +349,7 @@ class CheckpointSuite extends SparkFunSuite with RDDCheckpointTester with LocalS
 
   runTest("BlockRDD") { reliableCheckpoint: Boolean =>
     val blockId = TestBlockId("id")
-    val blockManager = SparkEnv.get(sc.sparkUser).blockManager
+    val blockManager = SparkEnv.get(sc._sparkUser).blockManager
     blockManager.putSingle(blockId, "test", StorageLevel.MEMORY_ONLY)
     val blockRDD = new BlockRDD[String](sc, Array(blockId))
     val numPartitions = blockRDD.partitions.size

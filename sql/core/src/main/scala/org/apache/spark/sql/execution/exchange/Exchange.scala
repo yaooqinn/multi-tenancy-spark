@@ -45,8 +45,10 @@ abstract class Exchange extends UnaryExecNode {
  * logically identical output will have distinct sets of output attribute ids, so we need to
  * preserve the original ids because they're what downstream operators are expecting.
  */
-case class ReusedExchangeExec(override val output: Seq[Attribute], child: Exchange)
-  extends LeafExecNode {
+case class ReusedExchangeExec(
+     override val output: Seq[Attribute],
+     child: Exchange,
+     override val user: String) extends LeafExecNode {
 
   override def sameResult(plan: SparkPlan): Boolean = {
     // Ignore this wrapper. `plan` could also be a ReusedExchange, so we reverse the order here.
@@ -84,7 +86,7 @@ case class ReuseExchange(conf: SQLConf) extends Rule[SparkPlan] {
         if (samePlan.isDefined) {
           // Keep the output of this exchange, the following plans require that to resolve
           // attributes.
-          ReusedExchangeExec(exchange.output, samePlan.get)
+          ReusedExchangeExec(exchange.output, samePlan.get, plan.user)
         } else {
           sameSchema += exchange
           exchange

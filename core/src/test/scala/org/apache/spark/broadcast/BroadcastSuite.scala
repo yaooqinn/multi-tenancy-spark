@@ -26,6 +26,7 @@ import org.apache.spark.io.SnappyCompressionCodec
 import org.apache.spark.rdd.RDD
 import org.apache.spark.serializer.JavaSerializer
 import org.apache.spark.storage._
+import org.apache.spark.util.Utils
 
 // Dummy class that creates a broadcast variable but doesn't use it
 class DummyBroadcastClass(rdd: RDD[Int]) extends Serializable {
@@ -35,7 +36,8 @@ class DummyBroadcastClass(rdd: RDD[Int]) extends Serializable {
 
   def doSomething(): Set[(Int, Boolean)] = {
     rdd.map { x =>
-      val bm = SparkEnv.get(rdd.context.sparkUser).blockManager
+      val user = Utils.getCurrentUserName()
+      val bm = SparkEnv.get(user).blockManager
       // Check if broadcast block was fetched
       val isFound = bm.getLocalValues(BroadcastBlockId(bid)).isDefined
       (x, isFound)

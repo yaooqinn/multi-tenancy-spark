@@ -59,7 +59,7 @@ private[spark] object UIWorkloadGenerator {
       if (schedulingMode == SchedulingMode.FAIR) {
         sc.setLocalProperty("spark.scheduler.pool", s)
       }
-      sc.setLocalProperty(SparkContext.SPARK_JOB_DESCRIPTION, s)
+      sc.setLocalProperty(SparkContext.SPARK_JOB_DESCRIPTION + sc.sparkUser, s)
     }
 
     val baseData = sc.makeRDD(1 to NUM_PARTITIONS * 10, NUM_PARTITIONS)

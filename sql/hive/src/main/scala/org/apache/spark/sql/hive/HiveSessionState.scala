@@ -84,7 +84,7 @@ private[hive] class HiveSessionState(sparkSession: SparkSession)
 
       override def strategies: Seq[Strategy] = {
         experimentalMethods.extraStrategies ++ Seq(
-          FileSourceStrategy,
+          FileSourceStrategy(user),
           DataSourceStrategy,
           DDLStrategy,
           SpecialLimits,

@@ -181,7 +181,7 @@ class DAGScheduler(
 
   // A closure serializer that we reuse.
   // This is only safe because DAGScheduler runs in a single thread.
-  private val closureSerializer = SparkEnv.get(sc.sparkUser).closureSerializer.newInstance()
+  private val closureSerializer = SparkEnv.get(sc._sparkUser).closureSerializer.newInstance()
 
   /** If enabled, FetchFailed will not cause stage retry, in order to surface the problem. */
   private val disallowStageRetryForTest = sc.getConf.getBoolean("spark.test.noStageRetry", false)
@@ -780,7 +780,7 @@ class DAGScheduler(
     // First finds all active jobs with this group id, and then kill stages for them.
     val activeInGroup = activeJobs.filter { activeJob =>
       Option(activeJob.properties).exists {
-        _.getProperty(SparkContext.SPARK_JOB_GROUP_ID) == groupId
+        _.getProperty(SparkContext.SPARK_JOB_GROUP_ID + sc.sparkUser) == groupId
       }
     }
     val jobIds = activeInGroup.map(_.jobId)
@@ -1436,7 +1436,8 @@ class DAGScheduler(
 
     val shouldInterruptThread =
       if (job.properties == null) false
-      else job.properties.getProperty(SparkContext.SPARK_JOB_INTERRUPT_ON_CANCEL, "false").toBoolean
+      else job.properties.getProperty(
+        SparkContext.SPARK_JOB_INTERRUPT_ON_CANCEL + sc.sparkUser, "false").toBoolean
 
     // Cancel all independent, running stages.
     val stages = jobIdToStageIds(job.jobId)

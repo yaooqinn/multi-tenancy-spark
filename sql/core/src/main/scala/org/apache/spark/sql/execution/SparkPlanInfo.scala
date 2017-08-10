@@ -51,7 +51,7 @@ private[execution] object SparkPlanInfo {
 
   def fromSparkPlan(plan: SparkPlan): SparkPlanInfo = {
     val children = plan match {
-      case ReusedExchangeExec(_, child) => child :: Nil
+      case ReusedExchangeExec(_, child, _) => child :: Nil
       case _ => plan.children ++ plan.subqueries
     }
     val metrics = plan.metrics.toSeq.map { case (key, metric) =>

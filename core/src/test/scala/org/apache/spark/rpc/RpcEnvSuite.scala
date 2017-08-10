@@ -44,6 +44,7 @@ import org.apache.spark.util.{ThreadUtils, Utils}
 abstract class RpcEnvSuite extends SparkFunSuite with BeforeAndAfterAll {
 
   var env: RpcEnv = _
+  val user = Utils.getCurrentUserName()
 
   override def beforeAll(): Unit = {
     super.beforeAll()
@@ -52,7 +53,7 @@ abstract class RpcEnvSuite extends SparkFunSuite with BeforeAndAfterAll {
 
     val sparkEnv = mock(classOf[SparkEnv])
     when(sparkEnv.rpcEnv).thenReturn(env)
-    SparkEnv.set("test", sparkEnv)
+    SparkEnv.set(user, sparkEnv)
   }
 
   override def afterAll(): Unit = {
@@ -60,7 +61,7 @@ abstract class RpcEnvSuite extends SparkFunSuite with BeforeAndAfterAll {
       if (env != null) {
         env.shutdown()
       }
-      SparkEnv.set("test", null)
+      SparkEnv.set(user, null)
     } finally {
       super.afterAll()
     }

@@ -48,7 +48,7 @@ class ReceiverInputDStreamSuite extends TestSuiteBase with BeforeAndAfterAll {
   }
 
   testWithoutWAL("createBlockRDD creates correct BlockRDD with block info") { receiverStream =>
-    val user = receiverStream.ssc.sparkContext.sparkUser
+    val user = receiverStream.ssc.sparkContext._sparkUser
 
     val blockInfos = Seq.fill(5) { createBlockInfo(withWALInfo = false, createBlock = true, user) }
     val blockIds = blockInfos.map(_.blockId)
@@ -68,7 +68,7 @@ class ReceiverInputDStreamSuite extends TestSuiteBase with BeforeAndAfterAll {
 
   testWithoutWAL("createBlockRDD filters non-existent blocks before creating BlockRDD") {
     receiverStream =>
-      val user = receiverStream.ssc.sparkContext.sparkUser
+      val user = receiverStream.ssc.sparkContext._sparkUser
 
       val presentBlockInfos = Seq.fill(2)(
         createBlockInfo(withWALInfo = false, createBlock = true, user))
@@ -99,7 +99,7 @@ class ReceiverInputDStreamSuite extends TestSuiteBase with BeforeAndAfterAll {
   testWithWAL(
     "createBlockRDD creates correct WALBackedBlockRDD with all block info having WAL info") {
     receiverStream =>
-      val user = receiverStream.ssc.sparkContext.sparkUser
+      val user = receiverStream.ssc.sparkContext._sparkUser
 
       val blockInfos = Seq.fill(5) { createBlockInfo(withWALInfo = true, createBlock = true, user) }
       val blockIds = blockInfos.map(_.blockId)
@@ -112,7 +112,7 @@ class ReceiverInputDStreamSuite extends TestSuiteBase with BeforeAndAfterAll {
 
   testWithWAL("createBlockRDD creates BlockRDD when some block info don't have WAL info") {
     receiverStream =>
-      val user = receiverStream.ssc.sparkContext.sparkUser
+      val user = receiverStream.ssc.sparkContext._sparkUser
 
       val blockInfos1 = Seq.fill(2) { createBlockInfo(withWALInfo = true, user = user) }
       val blockInfos2 = Seq.fill(3) { createBlockInfo(withWALInfo = false, user = user) }

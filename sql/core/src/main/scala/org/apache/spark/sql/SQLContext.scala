@@ -1094,6 +1094,11 @@ object SQLContext {
     SparkSession.clearActiveSession()
   }
 
+  @deprecated("Use SparkSession.clearActiveSession(user: String) instead", "2.0.0")
+  def clearActive(user: String): Unit = {
+    SparkSession.clearActiveSession(user)
+  }
+
   /**
    * Converts an iterator of Java Beans to InternalRow using the provided
    * bean info & schema. This is not related to the singleton, but is a static

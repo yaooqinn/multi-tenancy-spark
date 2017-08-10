@@ -33,16 +33,17 @@ class SparkPlannerSuite extends SharedSQLContext {
 
     var planned = 0
     object TestStrategy extends Strategy {
+      def user: String = sparkContext.sparkUser
       def apply(plan: LogicalPlan): Seq[SparkPlan] = plan match {
         case ReturnAnswer(child) =>
           planned += 1
-          planLater(child) :: planLater(NeverPlanned) :: Nil
+          planLater(child, user) :: planLater(NeverPlanned, user) :: Nil
         case Union(children) =>
           planned += 1
-          UnionExec(children.map(planLater)) :: planLater(NeverPlanned) :: Nil
+          UnionExec(children.map(p => planLater(p, user))) :: planLater(NeverPlanned, user) :: Nil
         case LocalRelation(output, data) =>
           planned += 1
-          LocalTableScanExec(output, data) :: planLater(NeverPlanned) :: Nil
+          LocalTableScanExec(output, data, user) :: planLater(NeverPlanned, user) :: Nil
         case NeverPlanned =>
           fail("QueryPlanner should not go down to this branch.")
         case _ => Nil

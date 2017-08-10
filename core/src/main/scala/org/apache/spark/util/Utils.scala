@@ -93,7 +93,12 @@ private[spark] object Utils extends Logging {
 
   private def maxNumToStringFields = {
     val user = getCurrentUserName
-    SparkEnv.get(user).conf.getInt("spark.debug.maxToStringFields", DEFAULT_MAX_TO_STRING_FIELDS)
+    val env = SparkEnv.get(user)
+    if (env != null) {
+      env.conf.getInt("spark.debug.maxToStringFields", DEFAULT_MAX_TO_STRING_FIELDS)
+    } else {
+      DEFAULT_MAX_TO_STRING_FIELDS
+    }
   }
 
   /** Whether we have warned about plan string truncation yet. */

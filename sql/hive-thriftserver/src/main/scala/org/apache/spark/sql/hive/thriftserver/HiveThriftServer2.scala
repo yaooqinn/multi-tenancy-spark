@@ -180,7 +180,9 @@ object HiveThriftServer2 extends Logging {
     override def onJobStart(jobStart: SparkListenerJobStart): Unit = synchronized {
       for {
         props <- Option(jobStart.properties)
-        groupId <- Option(props.getProperty(SparkContext.SPARK_JOB_GROUP_ID))
+        groupIdKey <- props.stringPropertyNames().asScala.
+          filter(_.startsWith(SparkContext.SPARK_JOB_GROUP_ID))
+        groupId <- Option(props.getProperty(groupIdKey))
         (_, info) <- executionList if info.groupId == groupId
       } {
         info.jobId += jobStart.jobId.toString

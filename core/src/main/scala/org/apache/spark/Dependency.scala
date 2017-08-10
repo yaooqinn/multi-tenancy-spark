@@ -91,7 +91,7 @@ class ShuffleDependency[K: ClassTag, V: ClassTag, C: ClassTag](
     shuffleId, _rdd.partitions.length, this)
 
   if (serializer == null) {
-    serializer = SparkEnv.get(_rdd.context.sparkUser).serializer
+    serializer = SparkEnv.get(_rdd.context._sparkUser).serializer
   }
   _rdd.sparkContext.cleaner.foreach(_.registerShuffleForCleanup(this))
 }

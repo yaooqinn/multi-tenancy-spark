@@ -61,7 +61,7 @@ class ExchangeSuite extends SparkPlanTest with SharedSQLContext {
     val hashMode2 =
       HashedRelationBroadcastMode(Alias(output.head, "id2")() :: Nil)
     val exchange3 = BroadcastExchangeExec(hashMode2, plan)
-    val exchange4 = ReusedExchangeExec(output, exchange3)
+    val exchange4 = ReusedExchangeExec(output, exchange3, sparkContext.sparkUser)
 
     assert(exchange1 sameResult exchange1)
     assert(exchange2 sameResult exchange2)
@@ -87,7 +87,7 @@ class ExchangeSuite extends SparkPlanTest with SharedSQLContext {
     val exchange3 = ShuffleExchange(part2, plan)
     val part3 = HashPartitioning(output ++ output, 2)
     val exchange4 = ShuffleExchange(part3, plan)
-    val exchange5 = ReusedExchangeExec(output, exchange4)
+    val exchange5 = ReusedExchangeExec(output, exchange4, sparkContext.sparkUser)
 
     assert(exchange1 sameResult exchange1)
     assert(exchange2 sameResult exchange2)

@@ -44,6 +44,8 @@ class QueryExecution(val sparkSession: SparkSession, val logical: LogicalPlan) {
   // TODO: Move the planner an optimizer into here from SessionState.
   protected def planner = sparkSession.sessionState.planner
 
+  private val user: String = sparkSession.sparkContext.sparkUser
+
   def assertAnalyzed(): Unit = {
     try sparkSession.sessionState.analyzer.checkAnalysis(analyzed) catch {
       case e: AnalysisException =>
@@ -76,7 +78,7 @@ class QueryExecution(val sparkSession: SparkSession, val logical: LogicalPlan) {
     SparkSession.setActiveSession(sparkSession)
     // TODO: We use next(), i.e. take the first plan returned by the planner, here for now,
     //       but we will implement to choose the best plan.
-    planner.plan(ReturnAnswer(optimizedPlan)).next()
+    planner.plan(ReturnAnswer(optimizedPlan), user).next()
   }
 
   // executedPlan should not be used to initialize any SparkPlan. It should be

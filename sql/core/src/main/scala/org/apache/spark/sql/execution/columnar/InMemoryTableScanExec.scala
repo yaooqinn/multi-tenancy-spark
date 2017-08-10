@@ -31,7 +31,8 @@ import org.apache.spark.sql.types.UserDefinedType
 case class InMemoryTableScanExec(
     attributes: Seq[Attribute],
     predicates: Seq[Expression],
-    @transient relation: InMemoryRelation)
+    @transient relation: InMemoryRelation,
+    override val user: String)
   extends LeafExecNode {
 
   override protected def innerChildren: Seq[QueryPlan[_]] = Seq(relation) ++ super.innerChildren

@@ -57,7 +57,7 @@ private[spark] class LocalEndpoint(
   val localExecutorId = SparkContext.DRIVER_IDENTIFIER
   val localExecutorHostname = "localhost"
 
-  private val user = Utils.getCurrentUserName
+  private val user = scheduler.sc.sparkUser
 
   private val executor = new Executor(
     localExecutorId, localExecutorHostname, SparkEnv.get(user), userClassPath, isLocal = true)
@@ -125,7 +125,7 @@ private[spark] class LocalSchedulerBackend(
   launcherBackend.connect()
 
   override def start() {
-    val rpcEnv = SparkEnv.get(scheduler.sc.sparkUser).rpcEnv
+    val rpcEnv = SparkEnv.get(scheduler.sc._sparkUser).rpcEnv
     val executorEndpoint = new LocalEndpoint(rpcEnv, userClassPath, scheduler, this, totalCores)
     localEndpoint = rpcEnv.setupEndpoint("LocalSchedulerBackendEndpoint", executorEndpoint)
     listenerBus.post(SparkListenerExecutorAdded(

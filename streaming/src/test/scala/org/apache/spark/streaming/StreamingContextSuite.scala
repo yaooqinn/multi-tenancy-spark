@@ -195,9 +195,10 @@ class StreamingContextSuite extends SparkFunSuite with BeforeAndAfter with Timeo
     @volatile var allFound: Boolean = false
 
     addInputStream(ssc).foreachRDD { rdd =>
-      jobGroupFound = sc.getLocalProperty(SparkContext.SPARK_JOB_GROUP_ID)
-      jobDescFound = sc.getLocalProperty(SparkContext.SPARK_JOB_DESCRIPTION)
-      jobInterruptFound = sc.getLocalProperty(SparkContext.SPARK_JOB_INTERRUPT_ON_CANCEL)
+      jobGroupFound = sc.getLocalProperty(SparkContext.SPARK_JOB_GROUP_ID + sc.sparkUser)
+      jobDescFound = sc.getLocalProperty(SparkContext.SPARK_JOB_DESCRIPTION + sc.sparkUser)
+      jobInterruptFound = sc.getLocalProperty(
+        SparkContext.SPARK_JOB_INTERRUPT_ON_CANCEL + sc.sparkUser)
       customPropFound = sc.getLocalProperty("customPropKey")
       allFound = true
     }
@@ -218,9 +219,11 @@ class StreamingContextSuite extends SparkFunSuite with BeforeAndAfter with Timeo
     assert(customPropFound === "value1")
 
     // Verify current thread's thread-local properties have not changed
-    assert(sc.getLocalProperty(SparkContext.SPARK_JOB_GROUP_ID) === "non-streaming")
-    assert(sc.getLocalProperty(SparkContext.SPARK_JOB_DESCRIPTION) === "non-streaming")
-    assert(sc.getLocalProperty(SparkContext.SPARK_JOB_INTERRUPT_ON_CANCEL) === "true")
+    assert(sc.getLocalProperty(
+      SparkContext.SPARK_JOB_GROUP_ID + sc.sparkUser) === "non-streaming")
+    assert(sc.getLocalProperty(
+      SparkContext.SPARK_JOB_DESCRIPTION + sc.sparkUser) === "non-streaming")
+    assert(sc.getLocalProperty(SparkContext.SPARK_JOB_INTERRUPT_ON_CANCEL + sc.sparkUser) === "true")
     assert(sc.getLocalProperty("customPropKey") === "value2")
   }
 

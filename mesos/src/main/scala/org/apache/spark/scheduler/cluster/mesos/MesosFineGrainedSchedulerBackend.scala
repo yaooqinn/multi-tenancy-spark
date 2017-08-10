@@ -74,7 +74,7 @@ private[spark] class MesosFineGrainedSchedulerBackend(
     val driver = createSchedulerDriver(
       master,
       MesosFineGrainedSchedulerBackend.this,
-      sc.sparkUser,
+      sc._sparkUser,
       sc.appName,
       sc.conf,
       sc.conf.getOption("spark.mesos.driver.webui.url").orElse(sc.ui.map(_.appUIAddress)),

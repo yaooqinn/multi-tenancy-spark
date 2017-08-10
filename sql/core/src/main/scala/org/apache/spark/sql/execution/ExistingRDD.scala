@@ -107,6 +107,8 @@ case class ExternalRDDScanExec[T](
     outputObjAttr: Attribute,
     rdd: RDD[T]) extends LeafExecNode with ObjectProducerExec {
 
+  override def user: String = rdd.sparkContext.sparkUser
+
   override lazy val metrics = Map(
     "numOutputRows" -> SQLMetrics.createMetric(sparkContext, "number of output rows"))
 
@@ -185,6 +187,8 @@ case class RDDScanExec(
     override val outputPartitioning: Partitioning = UnknownPartitioning(0),
     override val outputOrdering: Seq[SortOrder] = Nil) extends LeafExecNode {
 
+
+  override def user: String = rdd.sparkContext.sparkUser
   override lazy val metrics = Map(
     "numOutputRows" -> SQLMetrics.createMetric(sparkContext, "number of output rows"))
 

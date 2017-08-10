@@ -19,6 +19,7 @@ package org.apache.spark.sql
 
 import java.beans.Introspector
 import java.io.Closeable
+import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.atomic.AtomicReference
 
 import scala.collection.JavaConverters._
@@ -26,8 +27,7 @@ import scala.reflect.ClassTag
 import scala.reflect.runtime.universe.TypeTag
 import scala.util.control.NonFatal
 
-
-import org.apache.spark.{SparkConf, SparkContext, SPARK_VERSION}
+import org.apache.spark.{SPARK_VERSION, SparkConf, SparkContext}
 import org.apache.spark.annotation.{DeveloperApi, Experimental, InterfaceStability}
 import org.apache.spark.api.java.JavaRDD
 import org.apache.spark.internal.Logging
@@ -716,7 +716,7 @@ class SparkSession private(
 
 
 @InterfaceStability.Stable
-object SparkSession {
+object SparkSession extends Logging{
 
   /**
    * Builder for [[SparkSession]].
@@ -726,10 +726,12 @@ object SparkSession {
 
     private[this] val options = new scala.collection.mutable.HashMap[String, String]
 
-    private[this] var userSuppliedContext: Option[SparkContext] = None
+    private[this] var sessionUser = Utils.getCurrentUserName()
+
+    private[this] var userSuppliedContext = Map[String, SparkContext]()
 
     private[spark] def sparkContext(sparkContext: SparkContext): Builder = synchronized {
-      userSuppliedContext = Option(sparkContext)
+      userSuppliedContext += (sparkContext.sparkUser -> sparkContext)
       this
     }
 
@@ -819,6 +821,11 @@ object SparkSession {
       }
     }
 
+    def user(user: String): Builder = synchronized {
+      this.sessionUser = user
+      this
+    }
+
     /**
      * Gets an existing [[SparkSession]] or, if there is no existing one, creates a new
      * one based on the options set in this builder.
@@ -835,62 +842,66 @@ object SparkSession {
      * @since 2.0.0
      */
     def getOrCreate(): SparkSession = synchronized {
-      // Get the session from current thread's active session.
-      var session = activeThreadSession.get()
-      if ((session ne null) && !session.sparkContext.isStopped) {
-        options.foreach { case (k, v) => session.sessionState.conf.setConfString(k, v) }
-        if (options.nonEmpty) {
-          logWarning("Using an existing SparkSession; some configuration may not take effect.")
-        }
-        return session
-      }
-
-      // Global synchronization so we will only set the default session once.
-      SparkSession.synchronized {
-        // If the current thread does not have an active session, get it from the global session.
-        session = defaultSession.get()
-        if ((session ne null) && !session.sparkContext.isStopped) {
-          options.foreach { case (k, v) => session.sessionState.conf.setConfString(k, v) }
+      val session = Option(activeSessionWithUser.get(sessionUser)) match {
+        // Get the session from current thread's active session.
+        case Some(ss) if ((ss ne null) && !ss.sparkContext.isStopped) =>
+          options.foreach { case (k, v) => ss.sessionState.conf.setConfString(k, v) }
           if (options.nonEmpty) {
             logWarning("Using an existing SparkSession; some configuration may not take effect.")
           }
-          return session
-        }
+          ss
+        case _ =>
+          // Global synchronization so we will only set the default session once.
+          SparkSession.synchronized {
+            // If the current user does not have an active session,
+            // get it from the global session.
+            val ss = defaultSessionWithUser.get(sessionUser)
+            if ((ss ne null) && !ss.sparkContext.isStopped) {
+              options.foreach { case (k, v) => ss.sessionState.conf.setConfString(k, v) }
+              if (options.nonEmpty) {
+                logWarning(
+                  """
+                    |Using an existing SparkSession; some configuration may not take effect
+                  """.stripMargin)
+              }
+              ss
+            } else {
+              // No active nor global default session. Create a new one.
+              val sparkContext = userSuppliedContext.getOrElse(sessionUser, {
+                // set app name if not given
+                val randomAppName = java.util.UUID.randomUUID().toString
+                val sparkConf = new SparkConf()
+                options.foreach { case (k, v) => sparkConf.set(k, v) }
+                if (!sparkConf.contains("spark.app.name")) {
+                  sparkConf.setAppName(randomAppName)
+                }
+                val sc = SparkContext.getOrCreate(sparkConf, Some(sessionUser))
+                // maybe this is an existing SparkContext, update its SparkConf which maybe used
+                // by SparkSession
+                options.foreach { case (k, v) => sc.conf.set(k, v) }
+                if (!sc.conf.contains("spark.app.name")) {
+                  sc.conf.setAppName(randomAppName)
+                }
+                sc
+              })
+              val ss = new SparkSession(sparkContext)
+              options.foreach { case (k, v) => ss.sessionState.conf.setConfString(k, v) }
+              defaultSessionWithUser.put(sessionUser, ss)
 
-        // No active nor global default session. Create a new one.
-        val sparkContext = userSuppliedContext.getOrElse {
-          // set app name if not given
-          val randomAppName = java.util.UUID.randomUUID().toString
-          val sparkConf = new SparkConf()
-          options.foreach { case (k, v) => sparkConf.set(k, v) }
-          if (!sparkConf.contains("spark.app.name")) {
-            sparkConf.setAppName(randomAppName)
+              // Register a successfully instantiated context to the singleton. This should be at
+              // the end of the class definition so that the singleton is updated only if there is
+              // no exception in the construction of the instance.
+              sparkContext.addSparkListener(new SparkListener {
+                override def onApplicationEnd(applicationEnd: SparkListenerApplicationEnd): Unit = {
+                  defaultSessionWithUser.remove(sessionUser)
+                  sqlListener.set(null)
+                }
+              })
+              ss
+            }
           }
-          val sc = SparkContext.getOrCreate(sparkConf)
-          // maybe this is an existing SparkContext, update its SparkConf which maybe used
-          // by SparkSession
-          options.foreach { case (k, v) => sc.conf.set(k, v) }
-          if (!sc.conf.contains("spark.app.name")) {
-            sc.conf.setAppName(randomAppName)
-          }
-          sc
-        }
-        session = new SparkSession(sparkContext)
-        options.foreach { case (k, v) => session.sessionState.conf.setConfString(k, v) }
-        defaultSession.set(session)
-
-        // Register a successfully instantiated context to the singleton. This should be at the
-        // end of the class definition so that the singleton is updated only if there is no
-        // exception in the construction of the instance.
-        sparkContext.addSparkListener(new SparkListener {
-          override def onApplicationEnd(applicationEnd: SparkListenerApplicationEnd): Unit = {
-            defaultSession.set(null)
-            sqlListener.set(null)
-          }
-        })
       }
-
-      return session
+      session
     }
 
     /**
@@ -899,9 +910,6 @@ object SparkSession {
      * @return
      */
     def createWithContext(sc: SparkContext): SparkSession = synchronized {
-      assert(sc.conf.get("spark.driver.allowMultipleContexts", "false") == "true",
-        "This method can only be called when `allowMultipleContexts`")
-
       val randomAppName = java.util.UUID.randomUUID().toString
       options.foreach { case (k, v) => sc.conf.set(k, v) }
       if (!sc.conf.contains("spark.app.name")) {
@@ -912,7 +920,7 @@ object SparkSession {
 
       sc.addSparkListener(new SparkListener {
         override def onApplicationEnd(applicationEnd: SparkListenerApplicationEnd): Unit = {
-          defaultSession.set(null)
+          defaultSessionWithUser.remove(sessionUser)
           sqlListener.set(null)
         }
       })
@@ -937,17 +945,47 @@ object SparkSession {
    * @since 2.0.0
    */
   def setActiveSession(session: SparkSession): Unit = {
-    activeThreadSession.set(session)
+    activeSessionWithUser.put(session.sparkContext.sparkUser, session)
   }
 
   /**
-   * Clears the active SparkSession for current thread. Subsequent calls to getOrCreate will
-   * return the first created context instead of a thread-local override.
+   * Clears the active SparkSession for current user. Subsequent calls to getOrCreate will
+   * return the first created context instead of a user-specified active one.
+   *
+   * @param user: owner of SparkSession/SparkContext
    *
    * @since 2.0.0
    */
+  def clearActiveSession(user: String): Unit = {
+    require(user != null, "user could not be null")
+    if (activeSessionWithUser.containsKey(user)) {
+      activeSessionWithUser.remove(user)
+    } else {
+      logWarning(
+        s"""
+           |No active session for $user to clear!
+         """.stripMargin)
+    }
+  }
+
+  /**
+   * Clears the active SparkSession for default user. Subsequent calls to getOrCreate will
+   * return the first created context instead of a user-specified active one.
+   *
+   * @since ne-1.2.2
+   */
   def clearActiveSession(): Unit = {
-    activeThreadSession.remove()
+    val defaultUser = Utils.getCurrentUserName()
+    logWarning(
+      s"""
+         | In Netease Spark, we support multi-tenancy with SparkSession/SparkContext,
+         | which means they are all user-specified. Please call this method by its user
+         | specified version, if you do initialize SparkSession/SparkContext with a particular
+         | user. Ignore this if you initialize them with no user specified and we may do the
+         | [clearActiveSession] job with a default user [$defaultUser]
+       """.stripMargin)
+
+    clearActiveSession(defaultUser)
   }
 
   /**
@@ -956,7 +994,7 @@ object SparkSession {
    * @since 2.0.0
    */
   def setDefaultSession(session: SparkSession): Unit = {
-    defaultSession.set(session)
+    defaultSessionWithUser.put(session.sparkContext.sparkUser, session)
   }
 
   /**
@@ -965,12 +1003,84 @@ object SparkSession {
    * @since 2.0.0
    */
   def clearDefaultSession(): Unit = {
-    defaultSession.set(null)
+    val defaultUser = Utils.getCurrentUserName()
+    logWarning(
+      s"""
+         | In Netease Spark, we support multi-tenancy with SparkSession/SparkContext,
+         | which means they are all user-specified. Please call this method by its user
+         | specified version, if you do initialize SparkSession/SparkContext with a particular
+         | user. Ignore this if you initialize them with no user specified and we may do the
+         | [clearDefaultSession] job with a default user [$defaultUser]
+       """.stripMargin)
+
+    clearDefaultSession(defaultUser)
   }
 
-  private[sql] def getActiveSession: Option[SparkSession] = Option(activeThreadSession.get)
+  def clearDefaultSession(user: String): Unit = {
+    require(user != null, "user could not be null")
+    if (defaultSessionWithUser.containsKey(user)) {
+      defaultSessionWithUser.remove(user)
+    } else {
+      logWarning(
+        s"""
+           |No default session for $user to clear!
+         """.stripMargin)
+    }
+  }
 
-  private[sql] def getDefaultSession: Option[SparkSession] = Option(defaultSession.get)
+  private[sql] def getActiveSession: Option[SparkSession] = {
+    val defaultUser = Utils.getCurrentUserName()
+    logWarning(
+      s"""
+         | In Netease Spark, we support multi-tenancy with SparkSession/SparkContext,
+         | which means they are all user-specified. Please call this method by its user
+         | specified version, if you do initialize SparkSession/SparkContext with a particular
+         | user. Ignore this if you initialize them with no user specified and we may do the
+         | getActiveSession with a default user [$defaultUser]
+       """.stripMargin)
+
+    getActiveSession(defaultUser)
+  }
+
+  private[sql] def getActiveSession(user: String): Option[SparkSession] = {
+    require(user != null, "user could not be null")
+    if (activeSessionWithUser.containsKey(user)) {
+      Some(activeSessionWithUser.get(user))
+    } else {
+      logWarning(
+        s"""
+           |No active session for $user to get!
+         """.stripMargin)
+      None
+    }
+  }
+
+  private[sql] def getDefaultSession: Option[SparkSession] = {
+    val defaultUser = Utils.getCurrentUserName()
+    logWarning(
+      s"""
+         | In Netease Spark, we support multi-tenancy with SparkSession/SparkContext,
+         | which means they are all user-specified. Please call this method by its user
+         | specified version, if you do initialize SparkSession/SparkContext with a particular
+         | user. Ignore this if you initialize them with no user specified and we may do the
+         | [getDefaultSession] with a default user [$defaultUser]
+       """.stripMargin)
+
+    getDefaultSession(defaultUser)
+  }
+
+  private[sql] def getDefaultSession(user: String): Option[SparkSession] = {
+    require(user != null, "user could not be null")
+    if (defaultSessionWithUser.containsKey(user)) {
+      Some(defaultSessionWithUser.get(user))
+    } else {
+      logWarning(
+        s"""
+           |No active session for $user to get!
+         """.stripMargin)
+      None
+    }
+  }
 
   /** A global SQL listener used for the SQL UI. */
   private[sql] val sqlListener = new AtomicReference[SQLListener]()
@@ -979,11 +1089,11 @@ object SparkSession {
   // Private methods from now on
   ////////////////////////////////////////////////////////////////////////////////////////
 
-  /** The active SparkSession for the current thread. */
-  private val activeThreadSession = new InheritableThreadLocal[SparkSession]
+  /** The active SparkSession for the current user. */
+  private val activeSessionWithUser = new ConcurrentHashMap[String, SparkSession]
 
   /** Reference to the root SparkSession. */
-  private val defaultSession = new AtomicReference[SparkSession]
+  private val defaultSessionWithUser = new ConcurrentHashMap[String, SparkSession]()
 
   private val HIVE_SESSION_STATE_CLASS_NAME = "org.apache.spark.sql.hive.HiveSessionState"
 

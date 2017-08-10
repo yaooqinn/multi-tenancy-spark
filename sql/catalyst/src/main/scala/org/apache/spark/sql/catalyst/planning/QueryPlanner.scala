@@ -33,7 +33,7 @@ abstract class GenericStrategy[PhysicalPlan <: TreeNode[PhysicalPlan]] extends L
    * filled in automatically by the QueryPlanner using the other execution strategies that are
    * available.
    */
-  protected def planLater(plan: LogicalPlan): PhysicalPlan
+  protected def planLater(plan: LogicalPlan, user: String): PhysicalPlan
 
   def apply(plan: LogicalPlan): Seq[PhysicalPlan]
 }
@@ -55,7 +55,7 @@ abstract class QueryPlanner[PhysicalPlan <: TreeNode[PhysicalPlan]] {
   /** A list of execution strategies that can be used by the planner */
   def strategies: Seq[GenericStrategy[PhysicalPlan]]
 
-  def plan(plan: LogicalPlan): Iterator[PhysicalPlan] = {
+  def plan(plan: LogicalPlan, user: String): Iterator[PhysicalPlan] = {
     // Obviously a lot to do here still...
 
     // Collect physical plan candidates.
@@ -74,7 +74,7 @@ abstract class QueryPlanner[PhysicalPlan <: TreeNode[PhysicalPlan]] {
         placeholders.iterator.foldLeft(Iterator(candidate)) {
           case (candidatesWithPlaceholders, (placeholder, logicalPlan)) =>
             // Plan the logical plan for the placeholder.
-            val childPlans = this.plan(logicalPlan)
+            val childPlans = this.plan(logicalPlan, user)
 
             candidatesWithPlaceholders.flatMap { candidateWithPlaceholders =>
               childPlans.map { childPlan =>

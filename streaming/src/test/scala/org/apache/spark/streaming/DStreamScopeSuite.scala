@@ -203,8 +203,9 @@ class DStreamScopeSuite extends SparkFunSuite with BeforeAndAfter with BeforeAnd
   /** Assert that the RDD operation scope properties are not set in our SparkContext. */
   private def assertPropertiesNotSet(): Unit = {
     assert(ssc != null)
-    assert(ssc.sc.getLocalProperty(SparkContext.RDD_SCOPE_KEY) == null)
-    assert(ssc.sc.getLocalProperty(SparkContext.RDD_SCOPE_NO_OVERRIDE_KEY) == null)
+    assert(ssc.sc.getLocalProperty(SparkContext.RDD_SCOPE_KEY + ssc.sc.sparkUser) == null)
+    assert(ssc.sc.getLocalProperty(
+      SparkContext.RDD_SCOPE_NO_OVERRIDE_KEY + ssc.sc.sparkUser) == null)
   }
 
   /** Assert that the given RDD scope inherits the name and ID of the base scope correctly. */

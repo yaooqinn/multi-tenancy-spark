@@ -137,7 +137,7 @@ class StreamingContext private[streaming] (
     if (_sc != null) {
       _sc
     } else if (isCheckpointPresent) {
-      SparkContext.getOrCreate(_cp.createSparkConf())
+      SparkContext.getOrCreate(_cp.createSparkConf(), Some(_cp.user))
     } else {
       throw new SparkException("Cannot create StreamingContext without a SparkContext")
     }
@@ -578,7 +578,8 @@ class StreamingContext private[streaming] (
             ThreadUtils.runInNewThread("streaming-start") {
               sparkContext.setCallSite(startSite.get)
               sparkContext.clearJobGroup()
-              sparkContext.setLocalProperty(SparkContext.SPARK_JOB_INTERRUPT_ON_CANCEL, "false")
+              sparkContext.setLocalProperty(
+                SparkContext.SPARK_JOB_INTERRUPT_ON_CANCEL + sparkContext.sparkUser, "false")
               savedProperties.set(SerializationUtils.clone(sparkContext.localProperties.get()))
               scheduler.start()
             }

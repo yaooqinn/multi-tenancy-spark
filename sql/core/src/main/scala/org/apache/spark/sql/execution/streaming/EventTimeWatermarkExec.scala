@@ -83,6 +83,8 @@ case class EventTimeWatermarkExec(
     delay: CalendarInterval,
     child: SparkPlan) extends SparkPlan {
 
+  override def user: String = child.user
+
   val eventTimeStats = new EventTimeStatsAccum()
   sparkContext.register(eventTimeStats)
 

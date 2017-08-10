@@ -44,10 +44,13 @@ import org.apache.spark.sql.streaming.StreamingQuery
  */
 abstract class SparkStrategy extends GenericStrategy[SparkPlan] {
 
-  override protected def planLater(plan: LogicalPlan): SparkPlan = PlanLater(plan)
+  override protected def planLater(plan: LogicalPlan, user: String): SparkPlan =
+    PlanLater(plan, user)
 }
 
-case class PlanLater(plan: LogicalPlan) extends LeafExecNode {
+case class PlanLater(
+     plan: LogicalPlan,
+     override val user: String) extends LeafExecNode {
 
   override def output: Seq[Attribute] = plan.output
 
@@ -66,22 +69,24 @@ abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
     override def apply(plan: LogicalPlan): Seq[SparkPlan] = plan match {
       case logical.ReturnAnswer(rootPlan) => rootPlan match {
         case logical.Limit(IntegerLiteral(limit), logical.Sort(order, true, child)) =>
-          execution.TakeOrderedAndProjectExec(limit, order, child.output, planLater(child)) :: Nil
+          execution.TakeOrderedAndProjectExec(
+            limit, order, child.output, planLater(child, sparkContext.sparkUser)) :: Nil
         case logical.Limit(
             IntegerLiteral(limit),
             logical.Project(projectList, logical.Sort(order, true, child))) =>
           execution.TakeOrderedAndProjectExec(
-            limit, order, projectList, planLater(child)) :: Nil
+            limit, order, projectList, planLater(child, sparkContext.sparkUser)) :: Nil
         case logical.Limit(IntegerLiteral(limit), child) =>
-          execution.CollectLimitExec(limit, planLater(child)) :: Nil
-        case other => planLater(other) :: Nil
+          execution.CollectLimitExec(limit, planLater(child, sparkContext.sparkUser)) :: Nil
+        case other => planLater(other, sparkContext.sparkUser) :: Nil
       }
       case logical.Limit(IntegerLiteral(limit), logical.Sort(order, true, child)) =>
-        execution.TakeOrderedAndProjectExec(limit, order, child.output, planLater(child)) :: Nil
+        execution.TakeOrderedAndProjectExec(
+          limit, order, child.output, planLater(child, sparkContext.sparkUser)) :: Nil
       case logical.Limit(
           IntegerLiteral(limit), logical.Project(projectList, logical.Sort(order, true, child))) =>
         execution.TakeOrderedAndProjectExec(
-          limit, order, projectList, planLater(child)) :: Nil
+          limit, order, projectList, planLater(child, sparkContext.sparkUser)) :: Nil
       case _ => Nil
     }
   }
@@ -158,12 +163,16 @@ abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
       case ExtractEquiJoinKeys(joinType, leftKeys, rightKeys, condition, left, right)
         if canBuildRight(joinType) && canBroadcast(right) =>
         Seq(joins.BroadcastHashJoinExec(
-          leftKeys, rightKeys, joinType, BuildRight, condition, planLater(left), planLater(right)))
+          leftKeys, rightKeys, joinType, BuildRight, condition,
+          planLater(left, sparkContext.sparkUser),
+          planLater(right, sparkContext.sparkUser)))
 
       case ExtractEquiJoinKeys(joinType, leftKeys, rightKeys, condition, left, right)
         if canBuildLeft(joinType) && canBroadcast(left) =>
         Seq(joins.BroadcastHashJoinExec(
-          leftKeys, rightKeys, joinType, BuildLeft, condition, planLater(left), planLater(right)))
+          leftKeys, rightKeys, joinType, BuildLeft, condition,
+          planLater(left, sparkContext.sparkUser),
+          planLater(right, sparkContext.sparkUser)))
 
       // --- ShuffledHashJoin ---------------------------------------------------------------------
 
@@ -172,21 +181,27 @@ abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
            && muchSmaller(right, left) ||
            !RowOrdering.isOrderable(leftKeys) =>
         Seq(joins.ShuffledHashJoinExec(
-          leftKeys, rightKeys, joinType, BuildRight, condition, planLater(left), planLater(right)))
+          leftKeys, rightKeys, joinType, BuildRight, condition,
+          planLater(left, sparkContext.sparkUser),
+          planLater(right, sparkContext.sparkUser)))
 
       case ExtractEquiJoinKeys(joinType, leftKeys, rightKeys, condition, left, right)
          if !conf.preferSortMergeJoin && canBuildLeft(joinType) && canBuildLocalHashMap(left)
            && muchSmaller(left, right) ||
            !RowOrdering.isOrderable(leftKeys) =>
         Seq(joins.ShuffledHashJoinExec(
-          leftKeys, rightKeys, joinType, BuildLeft, condition, planLater(left), planLater(right)))
+          leftKeys, rightKeys, joinType, BuildLeft, condition,
+          planLater(left, sparkContext.sparkUser),
+          planLater(right, sparkContext.sparkUser)))
 
       // --- SortMergeJoin ------------------------------------------------------------
 
       case ExtractEquiJoinKeys(joinType, leftKeys, rightKeys, condition, left, right)
         if RowOrdering.isOrderable(leftKeys) =>
         joins.SortMergeJoinExec(
-          leftKeys, rightKeys, joinType, condition, planLater(left), planLater(right)) :: Nil
+          leftKeys, rightKeys, joinType, condition,
+          planLater(left, sparkContext.sparkUser),
+          planLater(right, sparkContext.sparkUser)) :: Nil
 
       // --- Without joining keys ------------------------------------------------------------
 
@@ -194,15 +209,21 @@ abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
       case j @ logical.Join(left, right, joinType, condition)
           if canBuildRight(joinType) && canBroadcast(right) =>
         joins.BroadcastNestedLoopJoinExec(
-          planLater(left), planLater(right), BuildRight, joinType, condition) :: Nil
+          planLater(left, sparkContext.sparkUser),
+          planLater(right, sparkContext.sparkUser),
+          BuildRight, joinType, condition) :: Nil
       case j @ logical.Join(left, right, joinType, condition)
           if canBuildLeft(joinType) && canBroadcast(left) =>
         joins.BroadcastNestedLoopJoinExec(
-          planLater(left), planLater(right), BuildLeft, joinType, condition) :: Nil
+          planLater(left, sparkContext.sparkUser),
+          planLater(right, sparkContext.sparkUser), BuildLeft, joinType, condition) :: Nil
 
       // Pick CartesianProduct for InnerJoin
       case logical.Join(left, right, _: InnerLike, condition) =>
-        joins.CartesianProductExec(planLater(left), planLater(right), condition) :: Nil
+        joins.CartesianProductExec(
+          planLater(left, sparkContext.sparkUser),
+          planLater(right, sparkContext.sparkUser),
+          condition) :: Nil
 
       case logical.Join(left, right, joinType, condition) =>
         val buildSide =
@@ -213,7 +234,9 @@ abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
           }
         // This join could be very slow or OOM
         joins.BroadcastNestedLoopJoinExec(
-          planLater(left), planLater(right), buildSide, joinType, condition) :: Nil
+          planLater(left, sparkContext.sparkUser),
+          planLater(right, sparkContext.sparkUser),
+          buildSide, joinType, condition) :: Nil
 
       // --- Cases where this strategy does not apply ---------------------------------------------
 
@@ -229,7 +252,7 @@ abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
   object StatefulAggregationStrategy extends Strategy {
     override def apply(plan: LogicalPlan): Seq[SparkPlan] = plan match {
       case EventTimeWatermark(columnName, delay, child) =>
-        EventTimeWatermarkExec(columnName, delay, planLater(child)) :: Nil
+        EventTimeWatermarkExec(columnName, delay, planLater(child, sparkContext.sparkUser)) :: Nil
 
       case PhysicalAggregation(
         namedGroupingExpressions, aggregateExpressions, rewrittenResultExpressions, child) =>
@@ -238,7 +261,7 @@ abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
           namedGroupingExpressions,
           aggregateExpressions,
           rewrittenResultExpressions,
-          planLater(child))
+          planLater(child, sparkContext.sparkUser))
 
       case _ => Nil
     }
@@ -271,21 +294,21 @@ abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
                 groupingExpressions,
                 aggregateExpressions,
                 resultExpressions,
-                planLater(child))
+                planLater(child, sparkContext.sparkUser))
             }
           } else if (functionsWithDistinct.isEmpty) {
             aggregate.AggUtils.planAggregateWithoutDistinct(
               groupingExpressions,
               aggregateExpressions,
               resultExpressions,
-              planLater(child))
+              planLater(child, sparkContext.sparkUser))
           } else {
             aggregate.AggUtils.planAggregateWithOneDistinct(
               groupingExpressions,
               functionsWithDistinct,
               functionsWithoutDistinct,
               resultExpressions,
-              planLater(child))
+              planLater(child, sparkContext.sparkUser))
           }
 
         aggregateOperator
@@ -303,7 +326,7 @@ abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
           projectList,
           filters,
           identity[Seq[Expression]], // All filters still need to be evaluated.
-          InMemoryTableScanExec(_, filters, mem)) :: Nil
+          InMemoryTableScanExec(_, filters, mem, sparkContext.sparkUser)) :: Nil
       case _ => Nil
     }
   }
@@ -315,11 +338,12 @@ abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
    * be replaced with the real relation using the `Source` in `StreamExecution`.
    */
   object StreamingRelationStrategy extends Strategy {
+    def user: String = sparkContext.sparkUser
     def apply(plan: LogicalPlan): Seq[SparkPlan] = plan match {
       case s: StreamingRelation =>
-        StreamingRelationExec(s.sourceName, s.output) :: Nil
+        StreamingRelationExec(s.sourceName, s.output, user) :: Nil
       case s: StreamingExecutionRelation =>
-        StreamingRelationExec(s.toString, s.output) :: Nil
+        StreamingRelationExec(s.toString, s.output, user) :: Nil
       case _ => Nil
     }
   }
@@ -328,12 +352,14 @@ abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
   object BasicOperators extends Strategy {
     def numPartitions: Int = self.numPartitions
 
+    def user: String = sparkContext.sparkUser
+
     def apply(plan: LogicalPlan): Seq[SparkPlan] = plan match {
       case r: RunnableCommand => ExecutedCommandExec(r) :: Nil
 
       case MemoryPlan(sink, output) =>
         val encoder = RowEncoder(sink.schema)
-        LocalTableScanExec(output, sink.allData.map(r => encoder.toRow(r).copy())) :: Nil
+        LocalTableScanExec(output, sink.allData.map(r => encoder.toRow(r).copy()), user) :: Nil
 
       case logical.Distinct(child) =>
         throw new IllegalStateException(
@@ -346,77 +372,91 @@ abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
           "logical except operator should have been replaced by anti-join in the optimizer")
 
       case logical.DeserializeToObject(deserializer, objAttr, child) =>
-        execution.DeserializeToObjectExec(deserializer, objAttr, planLater(child)) :: Nil
+        execution.DeserializeToObjectExec(
+          deserializer, objAttr, planLater(child, user)) :: Nil
       case logical.SerializeFromObject(serializer, child) =>
-        execution.SerializeFromObjectExec(serializer, planLater(child)) :: Nil
+        execution.SerializeFromObjectExec(
+          serializer, planLater(child, user)) :: Nil
       case logical.MapPartitions(f, objAttr, child) =>
-        execution.MapPartitionsExec(f, objAttr, planLater(child)) :: Nil
+        execution.MapPartitionsExec(f, objAttr, planLater(child, user)) :: Nil
       case logical.MapPartitionsInR(f, p, b, is, os, objAttr, child) =>
         execution.MapPartitionsExec(
-          execution.r.MapPartitionsRWrapper(f, p, b, is, os), objAttr, planLater(child)) :: Nil
+          execution.r.MapPartitionsRWrapper(f, p, b, is, os),
+          objAttr, planLater(child, user)) :: Nil
       case logical.FlatMapGroupsInR(f, p, b, is, os, key, value, grouping, data, objAttr, child) =>
         execution.FlatMapGroupsInRExec(f, p, b, is, os, key, value, grouping,
-          data, objAttr, planLater(child)) :: Nil
+          data, objAttr, planLater(child, user)) :: Nil
       case logical.MapElements(f, _, _, objAttr, child) =>
-        execution.MapElementsExec(f, objAttr, planLater(child)) :: Nil
+        execution.MapElementsExec(f, objAttr, planLater(child, user)) :: Nil
       case logical.AppendColumns(f, _, _, in, out, child) =>
-        execution.AppendColumnsExec(f, in, out, planLater(child)) :: Nil
+        execution.AppendColumnsExec(f, in, out, planLater(child, user)) :: Nil
       case logical.AppendColumnsWithObject(f, childSer, newSer, child) =>
-        execution.AppendColumnsWithObjectExec(f, childSer, newSer, planLater(child)) :: Nil
+        execution.AppendColumnsWithObjectExec(
+          f, childSer, newSer, planLater(child, user)) :: Nil
       case logical.MapGroups(f, key, value, grouping, data, objAttr, child) =>
-        execution.MapGroupsExec(f, key, value, grouping, data, objAttr, planLater(child)) :: Nil
+        execution.MapGroupsExec(
+          f, key, value, grouping, data, objAttr, planLater(child, user)) :: Nil
       case logical.CoGroup(f, key, lObj, rObj, lGroup, rGroup, lAttr, rAttr, oAttr, left, right) =>
         execution.CoGroupExec(
           f, key, lObj, rObj, lGroup, rGroup, lAttr, rAttr, oAttr,
-          planLater(left), planLater(right)) :: Nil
+          planLater(left, user), planLater(right, user)) :: Nil
 
       case logical.Repartition(numPartitions, shuffle, child) =>
         if (shuffle) {
-          ShuffleExchange(RoundRobinPartitioning(numPartitions), planLater(child)) :: Nil
+          ShuffleExchange(
+            RoundRobinPartitioning(numPartitions), planLater(child, user)) :: Nil
         } else {
-          execution.CoalesceExec(numPartitions, planLater(child)) :: Nil
+          execution.CoalesceExec(numPartitions, planLater(child, user)) :: Nil
         }
       case logical.SortPartitions(sortExprs, child) =>
         // This sort only sorts tuples within a partition. Its requiredDistribution will be
         // an UnspecifiedDistribution.
-        execution.SortExec(sortExprs, global = false, child = planLater(child)) :: Nil
+        execution.SortExec(
+          sortExprs, global = false, child = planLater(child, user)) :: Nil
       case logical.Sort(sortExprs, global, child) =>
-        execution.SortExec(sortExprs, global, planLater(child)) :: Nil
+        execution.SortExec(sortExprs, global, planLater(child, user)) :: Nil
       case logical.Project(projectList, child) =>
-        execution.ProjectExec(projectList, planLater(child)) :: Nil
+        execution.ProjectExec(projectList, planLater(child, user)) :: Nil
       case logical.Filter(condition, child) =>
-        execution.FilterExec(condition, planLater(child)) :: Nil
+        execution.FilterExec(condition, planLater(child, user)) :: Nil
       case f: logical.TypedFilter =>
-        execution.FilterExec(f.typedCondition(f.deserializer), planLater(f.child)) :: Nil
+        execution.FilterExec(f.typedCondition(f.deserializer),
+          planLater(f.child, user)) :: Nil
       case e @ logical.Expand(_, _, child) =>
-        execution.ExpandExec(e.projections, e.output, planLater(child)) :: Nil
+        execution.ExpandExec(
+          e.projections, e.output, planLater(child, user)) :: Nil
       case logical.Window(windowExprs, partitionSpec, orderSpec, child) =>
-        execution.window.WindowExec(windowExprs, partitionSpec, orderSpec, planLater(child)) :: Nil
+        execution.window.WindowExec(
+          windowExprs, partitionSpec, orderSpec, planLater(child, user)) :: Nil
       case logical.Sample(lb, ub, withReplacement, seed, child) =>
-        execution.SampleExec(lb, ub, withReplacement, seed, planLater(child)) :: Nil
+        execution.SampleExec(
+          lb, ub, withReplacement, seed, planLater(child, user)) :: Nil
       case logical.LocalRelation(output, data) =>
-        LocalTableScanExec(output, data) :: Nil
+        LocalTableScanExec(output, data, user) :: Nil
       case logical.LocalLimit(IntegerLiteral(limit), child) =>
-        execution.LocalLimitExec(limit, planLater(child)) :: Nil
+        execution.LocalLimitExec(limit, planLater(child, user)) :: Nil
       case logical.GlobalLimit(IntegerLiteral(limit), child) =>
-        execution.GlobalLimitExec(limit, planLater(child)) :: Nil
+        execution.GlobalLimitExec(limit, planLater(child, user)) :: Nil
       case logical.Union(unionChildren) =>
-        execution.UnionExec(unionChildren.map(planLater)) :: Nil
+        execution.UnionExec(
+          unionChildren.map(p => planLater(p, user))) :: Nil
       case g @ logical.Generate(generator, join, outer, _, _, child) =>
         execution.GenerateExec(
           generator, join = join, outer = outer, g.qualifiedGeneratorOutput,
-          planLater(child)) :: Nil
+          planLater(child, user)) :: Nil
       case logical.OneRowRelation =>
         execution.RDDScanExec(Nil, singleRowRdd, "OneRowRelation") :: Nil
       case r: logical.Range =>
-        execution.RangeExec(r) :: Nil
+        execution.RangeExec(r, user) :: Nil
       case logical.RepartitionByExpression(expressions, child, nPartitions) =>
         exchange.ShuffleExchange(HashPartitioning(
-          expressions, nPartitions.getOrElse(numPartitions)), planLater(child)) :: Nil
+          expressions,
+          nPartitions.getOrElse(numPartitions)),
+          planLater(child, user)) :: Nil
       case ExternalRDD(outputObjAttr, rdd) => ExternalRDDScanExec(outputObjAttr, rdd) :: Nil
       case r: LogicalRDD =>
         RDDScanExec(r.output, r.rdd, "ExistingRDD", r.outputPartitioning, r.outputOrdering) :: Nil
-      case BroadcastHint(child) => planLater(child) :: Nil
+      case BroadcastHint(child) => planLater(child, user) :: Nil
       case _ => Nil
     }
   }

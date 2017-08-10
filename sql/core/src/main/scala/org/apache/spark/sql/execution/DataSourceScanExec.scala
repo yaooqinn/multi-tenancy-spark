@@ -56,12 +56,14 @@ case class RowDataSourceScanExec(
     override val metastoreTableIdentifier: Option[TableIdentifier])
   extends DataSourceScanExec {
 
+  override def user: String = rdd.sparkContext.sparkUser
+
   override lazy val metrics =
     Map("numOutputRows" -> SQLMetrics.createMetric(sparkContext, "number of output rows"))
 
   val outputUnsafeRows = relation match {
     case r: HadoopFsRelation if r.fileFormat.isInstanceOf[ParquetSource] =>
-      !SparkSession.getActiveSession.get.sessionState.conf.getConf(
+      !SparkSession.getActiveSession(user).get.sessionState.conf.getConf(
         SQLConf.PARQUET_VECTORIZED_READER_ENABLED)
     case _: HadoopFsRelation => true
     case _ => false
@@ -144,14 +146,15 @@ case class FileSourceScanExec(
     outputSchema: StructType,
     partitionFilters: Seq[Expression],
     dataFilters: Seq[Filter],
-    override val metastoreTableIdentifier: Option[TableIdentifier])
+    override val metastoreTableIdentifier: Option[TableIdentifier],
+    override val user: String)
   extends DataSourceScanExec {
 
   val supportsBatch = relation.fileFormat.supportBatch(
     relation.sparkSession, StructType.fromAttributes(output))
 
   val needsUnsafeRowConversion = if (relation.fileFormat.isInstanceOf[ParquetSource]) {
-    SparkSession.getActiveSession.get.sessionState.conf.parquetVectorizedReaderEnabled
+    SparkSession.getActiveSession(user).get.sessionState.conf.parquetVectorizedReaderEnabled
   } else {
     false
   }

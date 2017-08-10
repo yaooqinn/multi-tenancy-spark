@@ -173,8 +173,6 @@ private[hive] class HiveClientImpl(
           case _ => new SessionState(hiveConf, user)
         }
 
-        state.setIsHiveServerQuery(true)
-
         if (clientLoader.cachedHive != null) {
           Hive.set(clientLoader.cachedHive.asInstanceOf[Hive])
         }

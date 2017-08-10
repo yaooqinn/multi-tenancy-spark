@@ -18,11 +18,12 @@
 package org.apache.spark.streaming
 
 import java.io._
-import java.util.concurrent.{ArrayBlockingQueue, RejectedExecutionException,
-  ThreadPoolExecutor, TimeUnit}
+import java.util.concurrent.{ArrayBlockingQueue, RejectedExecutionException, ThreadPoolExecutor, TimeUnit}
 
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.{FileSystem, Path}
+import org.apache.hadoop.security.UserGroupInformation
+import org.apache.hadoop.security.UserGroupInformation.AuthenticationMethod
 
 import org.apache.spark.{SparkConf, SparkException}
 import org.apache.spark.deploy.SparkHadoopUtil
@@ -42,6 +43,7 @@ class Checkpoint(ssc: StreamingContext, val checkpointTime: Time)
   val checkpointDuration = ssc.checkpointDuration
   val pendingTimes = ssc.scheduler.getPendingTimes().toArray
   val sparkConfPairs = ssc.conf.getAll
+  val user = ssc.sc._sparkUser
 
   def createSparkConf(): SparkConf = {
 

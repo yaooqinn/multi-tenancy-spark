@@ -22,6 +22,7 @@ import java.util.Objects
 
 import org.apache.spark._
 import org.apache.spark.rdd.RDD
+import org.apache.spark.util.Utils
 
 /**
  * A Partitioner that might group together one or more partitions from the parent.
@@ -104,7 +105,8 @@ class CustomShuffledRDD[K, V, C](
 
   override def compute(p: Partition, context: TaskContext): Iterator[(K, C)] = {
     val part = p.asInstanceOf[CustomShuffledRDDPartition]
-    SparkEnv.get(this.context.sparkUser).shuffleManager.getReader(
+    val user = Utils.getCurrentUserName()
+    SparkEnv.get(user).shuffleManager.getReader(
       dependency.shuffleHandle, part.startIndexInParent, part.endIndexInParent, context)
       .read()
       .asInstanceOf[Iterator[(K, C)]]

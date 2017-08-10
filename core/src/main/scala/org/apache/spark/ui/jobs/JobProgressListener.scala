@@ -41,7 +41,7 @@ import org.apache.spark.ui.jobs.UIData._
  * updating the internal data structures concurrently.
  */
 @DeveloperApi
-class JobProgressListener(conf: SparkConf) extends SparkListener with Logging {
+class JobProgressListener(conf: SparkConf, user: String) extends SparkListener with Logging {
 
   // Define a handful of type aliases so that data structures' types can serve as documentation.
   // These type aliases are public because they're used in the types of public fields:
@@ -177,7 +177,7 @@ class JobProgressListener(conf: SparkConf) extends SparkListener with Logging {
   override def onJobStart(jobStart: SparkListenerJobStart): Unit = synchronized {
     val jobGroup = for (
       props <- Option(jobStart.properties);
-      group <- Option(props.getProperty(SparkContext.SPARK_JOB_GROUP_ID))
+      group <- Option(props.getProperty(SparkContext.SPARK_JOB_GROUP_ID + user))
     ) yield group
     val jobData: JobUIData =
       new JobUIData(
@@ -307,7 +307,7 @@ class JobProgressListener(conf: SparkConf) extends SparkListener with Logging {
     stageData.schedulingPool = poolName
 
     stageData.description = Option(stageSubmitted.properties).flatMap {
-      p => Option(p.getProperty(SparkContext.SPARK_JOB_DESCRIPTION))
+      p => Option(p.getProperty(SparkContext.SPARK_JOB_DESCRIPTION + user))
     }
 
     val stages = poolToActiveStages.getOrElseUpdate(poolName, new HashMap[Int, StageInfo])

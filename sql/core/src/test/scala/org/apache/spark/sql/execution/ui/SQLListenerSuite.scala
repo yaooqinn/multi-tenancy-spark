@@ -467,6 +467,8 @@ private case class MyPlan(sc: SparkContext, expectedValue: Long) extends LeafExe
   override def sparkContext: SparkContext = sc
   override def output: Seq[Attribute] = Seq()
 
+  override def user: String = sparkContext.sparkUser
+
   override val metrics: Map[String, SQLMetric] = Map(
     "dummy" -> SQLMetrics.createMetric(sc, "dummy"))
 

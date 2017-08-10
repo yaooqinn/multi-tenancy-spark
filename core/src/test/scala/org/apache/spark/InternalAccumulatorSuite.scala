@@ -22,7 +22,7 @@ import scala.collection.mutable.ArrayBuffer
 import org.apache.spark.executor.TaskMetrics
 import org.apache.spark.scheduler.AccumulableInfo
 import org.apache.spark.shuffle.FetchFailedException
-import org.apache.spark.util.{AccumulatorContext, AccumulatorV2}
+import org.apache.spark.util.{AccumulatorContext, AccumulatorV2, Utils}
 
 
 class InternalAccumulatorSuite extends SparkFunSuite with LocalSparkContext {
@@ -137,8 +137,9 @@ class InternalAccumulatorSuite extends SparkFunSuite with LocalSparkContext {
       val taskContext = TaskContext.get()
       val isFirstStageAttempt = taskContext.taskAttemptId() < numPartitions * 2
       if (isFirstStageAttempt) {
+        val user = Utils.getCurrentUserName()
         throw new FetchFailedException(
-          SparkEnv.get(sc.sparkUser).blockManager.blockManagerId,
+          SparkEnv.get(user).blockManager.blockManagerId,
           sid,
           taskContext.partitionId(),
           taskContext.partitionId(),

@@ -37,7 +37,8 @@ private[hive] trait HiveStrategies {
     def apply(plan: LogicalPlan): Seq[SparkPlan] = plan match {
       case logical.ScriptTransformation(input, script, output, child, ioschema) =>
         val hiveIoSchema = HiveScriptIOSchema(ioschema)
-        ScriptTransformation(input, script, output, planLater(child), hiveIoSchema) :: Nil
+        ScriptTransformation(
+          input, script, output, planLater(child, sparkContext.sparkUser), hiveIoSchema) :: Nil
       case _ => Nil
     }
   }
@@ -47,7 +48,11 @@ private[hive] trait HiveStrategies {
       case logical.InsertIntoTable(
           table: MetastoreRelation, partition, child, overwrite, ifNotExists) =>
         InsertIntoHiveTable(
-          table, partition, planLater(child), overwrite.enabled, ifNotExists) :: Nil
+          table,
+          partition,
+          planLater(child, sparkContext.sparkUser),
+          overwrite.enabled,
+          ifNotExists) :: Nil
 
       case CreateTable(tableDesc, mode, Some(query)) if tableDesc.provider.get == "hive" =>
         val newTableDesc = if (tableDesc.storage.serde.isEmpty) {

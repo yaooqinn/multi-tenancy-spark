@@ -33,6 +33,8 @@ class JobProgressListenerSuite extends SparkFunSuite with LocalSparkContext with
   val jobSubmissionTime = 1421191042750L
   val jobCompletionTime = 1421191296660L
 
+  val user = Utils.getCurrentUserName()
+
   private def createStageStartEvent(stageId: Int) = {
     val stageInfo = new StageInfo(stageId, 0, stageId.toString, 0, null, null, "")
     SparkListenerStageSubmitted(stageInfo)
@@ -55,7 +57,7 @@ class JobProgressListenerSuite extends SparkFunSuite with LocalSparkContext with
     }
     val properties: Option[Properties] = jobGroup.map { groupId =>
       val props = new Properties()
-      props.setProperty(SparkContext.SPARK_JOB_GROUP_ID, groupId)
+      props.setProperty(SparkContext.SPARK_JOB_GROUP_ID + user, groupId)
       props
     }
     SparkListenerJobStart(jobId, jobSubmissionTime, stageInfos, properties.orNull)
@@ -93,7 +95,7 @@ class JobProgressListenerSuite extends SparkFunSuite with LocalSparkContext with
     }
     val conf = new SparkConf()
     conf.set("spark.ui.retainedStages", 5.toString)
-    var listener = new JobProgressListener(conf)
+    var listener = new JobProgressListener(conf, user)
 
     // Test with 5 retainedStages
     runWithListener(listener)
@@ -102,7 +104,7 @@ class JobProgressListenerSuite extends SparkFunSuite with LocalSparkContext with
 
     // Test with 0 retainedStages
     conf.set("spark.ui.retainedStages", 0.toString)
-    listener = new JobProgressListener(conf)
+    listener = new JobProgressListener(conf, user)
     runWithListener(listener)
     listener.completedStages.size should be (0)
   }
@@ -110,7 +112,7 @@ class JobProgressListenerSuite extends SparkFunSuite with LocalSparkContext with
   test("test clearing of stageIdToActiveJobs") {
     val conf = new SparkConf()
     conf.set("spark.ui.retainedStages", 5.toString)
-    val listener = new JobProgressListener(conf)
+    val listener = new JobProgressListener(conf, user)
     val jobId = 0
     val stageIds = 1 to 50
     // Start a job with 50 stages
@@ -143,14 +145,14 @@ class JobProgressListenerSuite extends SparkFunSuite with LocalSparkContext with
     val conf = new SparkConf()
     conf.set("spark.ui.retainedJobs", 5.toString)
 
-    var listener = new JobProgressListener(conf)
+    var listener = new JobProgressListener(conf, user)
     runWithListener(listener)
     // This collection won't become empty, but it should be bounded by spark.ui.retainedJobs
     listener.jobGroupToJobIds.size should be (5)
 
     // Test with 0 jobs
     conf.set("spark.ui.retainedJobs", 0.toString)
-    listener = new JobProgressListener(conf)
+    listener = new JobProgressListener(conf, user)
     runWithListener(listener)
     listener.jobGroupToJobIds.size should be (0)
   }
@@ -159,7 +161,7 @@ class JobProgressListenerSuite extends SparkFunSuite with LocalSparkContext with
     val conf = new SparkConf()
     conf.set("spark.ui.retainedStages", 5.toString)
     conf.set("spark.ui.retainedJobs", 5.toString)
-    val listener = new JobProgressListener(conf)
+    val listener = new JobProgressListener(conf, user)
 
     // Run a bunch of jobs to get the listener into a state where we've exceeded both the
     // job and stage retention limits:
@@ -201,7 +203,7 @@ class JobProgressListenerSuite extends SparkFunSuite with LocalSparkContext with
 
   test("test executor id to summary") {
     val conf = new SparkConf()
-    val listener = new JobProgressListener(conf)
+    val listener = new JobProgressListener(conf, user)
     val taskMetrics = TaskMetrics.empty
     val shuffleReadMetrics = taskMetrics.createTempShuffleReadMetrics()
     assert(listener.stageIdToData.size === 0)
@@ -248,7 +250,7 @@ class JobProgressListenerSuite extends SparkFunSuite with LocalSparkContext with
 
   test("test task success vs failure counting for different task end reasons") {
     val conf = new SparkConf()
-    val listener = new JobProgressListener(conf)
+    val listener = new JobProgressListener(conf, user)
     val metrics = TaskMetrics.empty
     val taskInfo = new TaskInfo(1234L, 0, 3, 0L, "exe-1", "host1", TaskLocality.NODE_LOCAL, false)
     taskInfo.finishTime = 1
@@ -286,7 +288,7 @@ class JobProgressListenerSuite extends SparkFunSuite with LocalSparkContext with
 
   test("test update metrics") {
     val conf = new SparkConf()
-    val listener = new JobProgressListener(conf)
+    val listener = new JobProgressListener(conf, user)
 
     val taskType = Utils.getFormattedClassName(new ShuffleMapTask(0))
     val execId = "exe-1"

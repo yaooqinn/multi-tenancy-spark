@@ -100,7 +100,7 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
     // If this DriverEndpoint is changed to support multiple threads,
     // then this may need to be changed so that we don't share the serializer
     // instance across threads
-    private val ser = SparkEnv.get(scheduler.sc.sparkUser).closureSerializer.newInstance()
+    private val ser = SparkEnv.get(scheduler.sc._sparkUser).closureSerializer.newInstance()
 
     protected val addressToExecutorId = new HashMap[RpcAddress, String]
 
@@ -207,7 +207,7 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
 
       case RetrieveSparkAppConfig =>
         val reply = SparkAppConfig(sparkProperties,
-          SparkEnv.get(scheduler.sc.sparkUser).securityManager.getIOEncryptionKey())
+          SparkEnv.get(scheduler.sc._sparkUser).securityManager.getIOEncryptionKey())
         context.reply(reply)
     }
 

@@ -27,6 +27,7 @@ import org.apache.spark.internal.config._
 import org.apache.spark.security.CryptoStreamUtils._
 import org.apache.spark.serializer.{JavaSerializer, SerializerManager}
 import org.apache.spark.storage.TempShuffleBlockId
+import org.apache.spark.util.Utils
 
 class CryptoStreamUtilsSuite extends SparkFunSuite {
 
@@ -101,10 +102,11 @@ class CryptoStreamUtilsSuite extends SparkFunSuite {
       val content = "This is the content to be encrypted."
       val encrypted = sc.parallelize(Seq(1))
         .map { str =>
+          val user = Utils.getCurrentUserName()
           val bytes = new ByteArrayOutputStream()
           val out = CryptoStreamUtils.createCryptoOutputStream(bytes,
-            SparkEnv.get(sc.sparkUser).conf,
-            SparkEnv.get(sc.sparkUser).securityManager.getIOEncryptionKey().get)
+            SparkEnv.get(user).conf,
+            SparkEnv.get(user).securityManager.getIOEncryptionKey().get)
           out.write(content.getBytes(UTF_8))
           out.close()
           bytes.toByteArray()
@@ -113,7 +115,7 @@ class CryptoStreamUtilsSuite extends SparkFunSuite {
       assert(content != encrypted)
 
       val in = CryptoStreamUtils.createCryptoInputStream(new ByteArrayInputStream(encrypted),
-        sc.conf, SparkEnv.get(sc.sparkUser).securityManager.getIOEncryptionKey().get)
+        sc.conf, SparkEnv.get(sc._sparkUser).securityManager.getIOEncryptionKey().get)
       val decrypted = new String(ByteStreams.toByteArray(in), UTF_8)
       assert(content === decrypted)
     } finally {

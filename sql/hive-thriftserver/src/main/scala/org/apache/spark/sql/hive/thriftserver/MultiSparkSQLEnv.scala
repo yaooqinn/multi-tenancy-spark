@@ -48,8 +48,6 @@ private[hive] object MultiSparkSQLEnv extends Logging{
   val globalUgi: UserGroupInformation = UserGroupInformation.getCurrentUser
 
   def init(): Unit = {
-    originConf.set("spark.driver.allowMultipleContexts", "true")
-
     val users = originConf.get(PROXY_USERS).distinct.filter(_ != globalUgi.getShortUserName)
 
     require(users.nonEmpty, s"No user is configured in ${PROXY_USERS.key}, please specify the " +

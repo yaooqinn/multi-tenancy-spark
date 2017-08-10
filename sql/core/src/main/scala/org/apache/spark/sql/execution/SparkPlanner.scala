@@ -30,11 +30,13 @@ class SparkPlanner(
     val extraStrategies: Seq[Strategy])
   extends SparkStrategies {
 
+  def user: String = sparkContext.sparkUser
+  
   def numPartitions: Int = conf.numShufflePartitions
 
   def strategies: Seq[Strategy] =
       extraStrategies ++ (
-      FileSourceStrategy ::
+      FileSourceStrategy(user) ::
       DataSourceStrategy ::
       DDLStrategy ::
       SpecialLimits ::
@@ -43,9 +45,10 @@ class SparkPlanner(
       InMemoryScans ::
       BasicOperators :: Nil)
 
-  override protected def collectPlaceholders(plan: SparkPlan): Seq[(SparkPlan, LogicalPlan)] = {
+  override protected def collectPlaceholders(
+     plan: SparkPlan): Seq[(SparkPlan, LogicalPlan)] = {
     plan.collect {
-      case placeholder @ PlanLater(logicalPlan) => placeholder -> logicalPlan
+      case placeholder @ PlanLater(logicalPlan, _) => placeholder -> logicalPlan
     }
   }
 

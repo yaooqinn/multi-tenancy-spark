@@ -57,7 +57,10 @@ case class StreamingExecutionRelation(source: Source, output: Seq[Attribute]) ex
  * A dummy physical plan for [[StreamingRelation]] to support
  * [[org.apache.spark.sql.Dataset.explain]]
  */
-case class StreamingRelationExec(sourceName: String, output: Seq[Attribute]) extends LeafExecNode {
+case class StreamingRelationExec(
+    sourceName: String,
+    output: Seq[Attribute],
+    override val user: String) extends LeafExecNode {
   override def toString: String = sourceName
   override protected def doExecute(): RDD[InternalRow] = {
     throw new UnsupportedOperationException("StreamingRelationExec cannot be executed")

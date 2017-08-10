@@ -328,7 +328,9 @@ case class SampleExec(
 /**
  * Physical plan for range (generating a range of 64 bit numbers).
  */
-case class RangeExec(range: org.apache.spark.sql.catalyst.plans.logical.Range)
+case class RangeExec(
+     range: org.apache.spark.sql.catalyst.plans.logical.Range,
+     override val user: String)
   extends LeafExecNode with CodegenSupport {
 
   def start: Long = range.start

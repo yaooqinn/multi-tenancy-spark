@@ -22,6 +22,8 @@ import java.lang.reflect.Modifier
 import scala.language.existentials
 import scala.reflect.ClassTag
 
+import org.apache.hadoop.security.UserGroupInformation
+
 import org.apache.spark.{SparkConf, SparkEnv}
 import org.apache.spark.serializer._
 import org.apache.spark.sql.Row
@@ -806,14 +808,31 @@ case class EncodeUsingSerializer(child: Expression, kryo: Boolean)
         (classOf[JavaSerializer].getName, classOf[JavaSerializerInstance].getName)
       }
     }
+    val getUserFunc = ctx.freshName("getCurrentUserName")
+
+    ctx.addNewFunction(getUserFunc,
+      s"""
+         |private String $getUserFunc() throws java.io.IOException {
+         |   String user = System.getenv("SPARK_USER");
+         |   if (user == null) {
+         |      user = ${classOf[UserGroupInformation].getName}.getCurrentUser().getShortUserName();
+         |   }
+         |   return user;
+         |}
+       """.stripMargin)
+
     // try conf from env, otherwise create a new one
-    val env = s"${classOf[SparkEnv].getName}.get()"
+    val env = s"${classOf[SparkEnv].getName}.get($getUserFunc())"
     val sparkConf = s"new ${classOf[SparkConf].getName}()"
     val serializerInit = s"""
-      if ($env == null) {
-        $serializer = ($serializerInstanceClass) new $serializerClass($sparkConf).newInstance();
-       } else {
-         $serializer = ($serializerInstanceClass) new $serializerClass($env.conf()).newInstance();
+      try {
+        if ($env == null) {
+          $serializer = ($serializerInstanceClass) new $serializerClass($sparkConf).newInstance();
+         } else {
+           $serializer = ($serializerInstanceClass) new $serializerClass($env.conf()).newInstance();
+         }
+       } catch(java.io.IOException e) {
+         throw e;
        }
      """
     ctx.addMutableState(serializerInstanceClass, serializer, serializerInit)
@@ -852,14 +871,29 @@ case class DecodeUsingSerializer[T](child: Expression, tag: ClassTag[T], kryo: B
         (classOf[JavaSerializer].getName, classOf[JavaSerializerInstance].getName)
       }
     }
+    val getUserFunc = ctx.freshName("getCurrentUserName")
+    ctx.addNewFunction(getUserFunc,
+      s"""
+         |private String $getUserFunc() throws java.io.IOException {
+         |   String user = System.getenv("SPARK_USER");
+         |   if (user == null) {
+         |      user = ${classOf[UserGroupInformation].getName}.getCurrentUser().getShortUserName();
+         |   }
+         |   return user;
+         |}
+       """.stripMargin)
     // try conf from env, otherwise create a new one
-    val env = s"${classOf[SparkEnv].getName}.get()"
+    val env = s"${classOf[SparkEnv].getName}.get($getUserFunc())"
     val sparkConf = s"new ${classOf[SparkConf].getName}()"
     val serializerInit = s"""
-      if ($env == null) {
-        $serializer = ($serializerInstanceClass) new $serializerClass($sparkConf).newInstance();
-       } else {
-         $serializer = ($serializerInstanceClass) new $serializerClass($env.conf()).newInstance();
+      try {
+        if ($env == null) {
+          $serializer = ($serializerInstanceClass) new $serializerClass($sparkConf).newInstance();
+         } else {
+           $serializer = ($serializerInstanceClass) new $serializerClass($env.conf()).newInstance();
+         }
+       } catch(java.io.IOException e) {
+         throw e;
        }
      """
     ctx.addMutableState(serializerInstanceClass, serializer, serializerInit)

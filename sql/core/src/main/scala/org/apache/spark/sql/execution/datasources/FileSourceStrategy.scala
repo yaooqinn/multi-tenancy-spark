@@ -49,7 +49,7 @@ import org.apache.spark.sql.execution.SparkPlan
  *     is under the threshold with the addition of the next file, add it.  If not, open a new bucket
  *     and add it.  Proceed to the next file.
  */
-object FileSourceStrategy extends Strategy with Logging {
+case class FileSourceStrategy(user: String) extends Strategy with Logging {
   def apply(plan: LogicalPlan): Seq[SparkPlan] = plan match {
     case PhysicalOperation(projects, filters,
       l @ LogicalRelation(fsRelation: HadoopFsRelation, _, table)) =>
@@ -112,7 +112,8 @@ object FileSourceStrategy extends Strategy with Logging {
           outputSchema,
           partitionKeyFilters.toSeq,
           pushedDownFilters,
-          table.map(_.identifier))
+          table.map(_.identifier),
+          user)
 
       val afterScanFilter = afterScanFilters.toSeq.reduceOption(expressions.And)
       val withFilter = afterScanFilter.map(execution.FilterExec(_, scan)).getOrElse(scan)

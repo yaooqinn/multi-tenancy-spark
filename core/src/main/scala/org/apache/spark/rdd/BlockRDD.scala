@@ -21,17 +21,18 @@ import scala.reflect.ClassTag
 
 import org.apache.spark._
 import org.apache.spark.storage.{BlockId, BlockManager}
+import org.apache.spark.util.Utils
 
 private[spark] class BlockRDDPartition(val blockId: BlockId, idx: Int) extends Partition {
   val index = idx
 }
 
 private[spark]
-class BlockRDD[T: ClassTag](sc: SparkContext, @transient val blockIds: Array[BlockId])
+class BlockRDD[T: ClassTag](@transient sc: SparkContext, @transient val blockIds: Array[BlockId])
   extends RDD[T](sc, Nil) {
 
   @transient lazy val _locations =
-    BlockManager.blockIdsToHosts(blockIds, SparkEnv.get(sc.sparkUser))
+    BlockManager.blockIdsToHosts(blockIds, SparkEnv.get(sc._sparkUser))
   @volatile private var _isValid = true
 
   override def getPartitions: Array[Partition] = {
@@ -43,7 +44,8 @@ class BlockRDD[T: ClassTag](sc: SparkContext, @transient val blockIds: Array[Blo
 
   override def compute(split: Partition, context: TaskContext): Iterator[T] = {
     assertValid()
-    val blockManager = SparkEnv.get(sc.sparkUser).blockManager
+    val user = Utils.getCurrentUserName()
+    val blockManager = SparkEnv.get(user).blockManager
     val blockId = split.asInstanceOf[BlockRDDPartition].blockId
     blockManager.get[T](blockId) match {
       case Some(block) => block.data.asInstanceOf[Iterator[T]]

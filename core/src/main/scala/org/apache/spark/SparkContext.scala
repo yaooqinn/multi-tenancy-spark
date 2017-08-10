@@ -22,7 +22,7 @@ import java.lang.reflect.Constructor
 import java.net.{URI}
 import java.util.{Arrays, Locale, Properties, ServiceLoader, UUID}
 import java.util.concurrent.{ConcurrentHashMap, ConcurrentMap}
-import java.util.concurrent.atomic.{AtomicBoolean, AtomicInteger, AtomicReference}
+import java.util.concurrent.atomic.{AtomicBoolean, AtomicInteger}
 
 import scala.collection.JavaConverters._
 import scala.collection.Map
@@ -76,14 +76,13 @@ class SparkContext(config: SparkConf, user: Option[String]) extends Logging {
   // The call site where this SparkContext was constructed.
   private val creationSite: CallSite = Utils.getCallSite()
 
-  // If true, log warnings instead of throwing exceptions when multiple SparkContexts are active
-  private val allowMultipleContexts: Boolean =
-    config.getBoolean("spark.driver.allowMultipleContexts", false)
+  // Set SPARK_USER for user who is running SparkContext.
+  lazy val _sparkUser = user.getOrElse(Utils.getCurrentUserName())
 
   // In order to prevent multiple SparkContexts from being active at the same time, mark this
   // context as having started construction.
   // NOTE: this must be placed at the beginning of the SparkContext constructor.
-  SparkContext.markPartiallyConstructed(this, allowMultipleContexts)
+  SparkContext.markPartiallyConstructed(this)
 
   val startTime = System.currentTimeMillis()
 
@@ -91,7 +90,7 @@ class SparkContext(config: SparkConf, user: Option[String]) extends Logging {
 
   private[spark] def assertNotStopped(): Unit = {
     if (stopped.get()) {
-      val activeContext = SparkContext.activeContext.get()
+      val activeContext = SparkContext.activeContextWithUser.get(_sparkUser)
       val activeCreationSite =
         if (activeContext == null) {
           "(No active SparkContext.)"
@@ -118,6 +117,8 @@ class SparkContext(config: SparkConf, user: Option[String]) extends Logging {
   def this() = this(new SparkConf(), None)
 
   def this(conf: SparkConf) = this(conf, None)
+
+  def this(user: Option[String]) = this(new SparkConf(), user)
 
   /**
    * Alternative constructor that allows setting common Spark properties directly
@@ -302,8 +303,7 @@ class SparkContext(config: SparkConf, user: Option[String]) extends Logging {
   // Environment variables to pass to our executors.
   private[spark] val executorEnvs = HashMap[String, String]()
 
-  // Set SPARK_USER for user who is running SparkContext.
-  val sparkUser = user.getOrElse(Utils.getCurrentUserName())
+  def sparkUser: String = _sparkUser
 
   private[spark] def schedulerBackend: SchedulerBackend = _schedulerBackend
 
@@ -436,12 +436,12 @@ class SparkContext(config: SparkConf, user: Option[String]) extends Logging {
 
     // "_jobProgressListener" should be set up before creating SparkEnv because when creating
     // "SparkEnv", some messages will be posted to "listenerBus" and we should not miss them.
-    _jobProgressListener = new JobProgressListener(_conf)
+    _jobProgressListener = new JobProgressListener(conf, sparkUser)
     listenerBus.addListener(jobProgressListener)
 
     // Create the Spark execution environment (cache, map output tracker, etc)
     _env = createSparkEnv(_conf, isLocal, listenerBus)
-    SparkEnv.set(sparkUser, _env)
+    SparkEnv.set(_sparkUser, _env)
 
     // If running the REPL, register the repl's output dir with the file server.
     _conf.getOption("spark.repl.class.outputDir").foreach { path =>
@@ -501,7 +501,7 @@ class SparkContext(config: SparkConf, user: Option[String]) extends Logging {
     // TODO: Set this only in the Mesos scheduler.
     executorEnvs("SPARK_EXECUTOR_MEMORY") = executorMemory + "m"
     executorEnvs ++= _conf.getExecutorEnv
-    executorEnvs("SPARK_USER") = sparkUser
+    executorEnvs("SPARK_USER") = _sparkUser
 
     // We need to register "HeartbeatReceiver" before "createTaskScheduler" because Executor will
     // retrieve "HeartbeatReceiver" in the constructor. (SPARK-6640)
@@ -659,7 +659,7 @@ class SparkContext(config: SparkConf, user: Option[String]) extends Logging {
 
   /** Set a human readable description of the current job. */
   def setJobDescription(value: String) {
-    setLocalProperty(SparkContext.SPARK_JOB_DESCRIPTION, value)
+    setLocalProperty(SparkContext.SPARK_JOB_DESCRIPTION + sparkUser, value)
   }
 
   /**
@@ -687,20 +687,21 @@ class SparkContext(config: SparkConf, user: Option[String]) extends Logging {
    * where HDFS may respond to Thread.interrupt() by marking nodes as dead.
    */
   def setJobGroup(groupId: String, description: String, interruptOnCancel: Boolean = false) {
-    setLocalProperty(SparkContext.SPARK_JOB_DESCRIPTION, description)
-    setLocalProperty(SparkContext.SPARK_JOB_GROUP_ID, groupId)
+    setLocalProperty(SparkContext.SPARK_JOB_DESCRIPTION + sparkUser, description)
+    setLocalProperty(SparkContext.SPARK_JOB_GROUP_ID + sparkUser, groupId)
     // Note: Specifying interruptOnCancel in setJobGroup (rather than cancelJobGroup) avoids
     // changing several public APIs and allows Spark cancellations outside of the cancelJobGroup
     // APIs to also take advantage of this property (e.g., internal job failures or canceling from
     // JobProgressTab UI) on a per-job basis.
-    setLocalProperty(SparkContext.SPARK_JOB_INTERRUPT_ON_CANCEL, interruptOnCancel.toString)
+    setLocalProperty(
+      SparkContext.SPARK_JOB_INTERRUPT_ON_CANCEL + sparkUser, interruptOnCancel.toString)
   }
 
   /** Clear the current thread's job group ID and its description. */
   def clearJobGroup() {
-    setLocalProperty(SparkContext.SPARK_JOB_DESCRIPTION, null)
-    setLocalProperty(SparkContext.SPARK_JOB_GROUP_ID, null)
-    setLocalProperty(SparkContext.SPARK_JOB_INTERRUPT_ON_CANCEL, null)
+    setLocalProperty(SparkContext.SPARK_JOB_DESCRIPTION + sparkUser, null)
+    setLocalProperty(SparkContext.SPARK_JOB_GROUP_ID + sparkUser, null)
+    setLocalProperty(SparkContext.SPARK_JOB_INTERRUPT_ON_CANCEL + sparkUser, null)
   }
 
   /**
@@ -1852,11 +1853,11 @@ class SparkContext(config: SparkConf, user: Option[String]) extends Logging {
       Utils.tryLogNonFatalError {
         _env.stop()
       }
-      SparkEnv.set(sparkUser, null)
+      SparkEnv.set(_sparkUser, null)
     }
     // Unset YARN mode system env variable, to allow switching between cluster types.
     System.clearProperty("SPARK_YARN_MODE")
-    SparkContext.clearActiveContext()
+    SparkContext.clearActiveContext(_sparkUser)
     logInfo("Successfully stopped SparkContext")
   }
 
@@ -2214,7 +2215,7 @@ class SparkContext(config: SparkConf, user: Option[String]) extends Logging {
     // Note: this code assumes that the task scheduler has been initialized and has contacted
     // the cluster manager to get an application ID (in case the cluster manager provides one).
     listenerBus.post(SparkListenerApplicationStart(appName, Some(applicationId),
-      startTime, sparkUser, applicationAttemptId, schedulerBackend.getDriverLogUrls))
+      startTime, _sparkUser, applicationAttemptId, schedulerBackend.getDriverLogUrls))
   }
 
   /** Post the application end event */
@@ -2235,10 +2236,8 @@ class SparkContext(config: SparkConf, user: Option[String]) extends Logging {
     }
   }
 
-  // In order to prevent multiple SparkContexts from being active at the same time, mark this
-  // context as having finished construction.
   // NOTE: this must be placed at the end of the SparkContext constructor.
-  SparkContext.setActiveContext(this, allowMultipleContexts)
+  SparkContext.setActiveContext(this)
 }
 
 /**
@@ -2250,61 +2249,52 @@ object SparkContext extends Logging {
     Set("ALL", "DEBUG", "ERROR", "FATAL", "INFO", "OFF", "TRACE", "WARN")
 
   /**
-   * Lock that guards access to global variables that track SparkContext construction.
+   * A [[java.util.concurrent.ConcurrentHashMap]] stores the user and its
+   * active, fully-constructed SparkContext.  If no SparkContext is active, then this is `null`.
    */
-  private val SPARK_CONTEXT_CONSTRUCTOR_LOCK = new Object()
-
-  /**
-   * The active, fully-constructed SparkContext.  If no SparkContext is active, then this is `null`.
-   *
-   * Access to this field is guarded by SPARK_CONTEXT_CONSTRUCTOR_LOCK.
-   */
-  private val activeContext: AtomicReference[SparkContext] =
-    new AtomicReference[SparkContext](null)
+  private val activeContextWithUser = new ConcurrentHashMap[String, SparkContext]()
 
   /**
    * Points to a partially-constructed SparkContext if some thread is in the SparkContext
    * constructor, or `None` if no SparkContext is being constructed.
-   *
-   * Access to this field is guarded by SPARK_CONTEXT_CONSTRUCTOR_LOCK
    */
-  private var contextBeingConstructed: Option[SparkContext] = None
+  private val contextBeingConstructedWithUser = new ConcurrentHashMap[String, SparkContext]()
 
   /**
-   * Called to ensure that no other SparkContext is running in this JVM.
+   * Called to ensure that no other SparkContext for a particular user is running in this JVM.
    *
-   * Throws an exception if a running context is detected and logs a warning if another thread is
-   * constructing a SparkContext.  This warning is necessary because the current locking scheme
+   * Throws an exception if a user-specified running context is detected and logs a warning if
+   * another thread is constructing a SparkContext.
+   * This warning is necessary because the current locking scheme
    * prevents us from reliably distinguishing between cases where another context is being
    * constructed and cases where another constructor threw an exception.
    */
   private def assertNoOtherContextIsRunning(
-      sc: SparkContext,
-      allowMultipleContexts: Boolean): Unit = {
-    SPARK_CONTEXT_CONSTRUCTOR_LOCK.synchronized {
-      Option(activeContext.get()).filter(_ ne sc).foreach { ctx =>
-          val errMsg = "Only one SparkContext may be running in this JVM (see SPARK-2243)." +
-            " To ignore this error, set spark.driver.allowMultipleContexts = true. " +
-            s"The currently running SparkContext was created at:\n${ctx.creationSite.longForm}"
-          val exception = new SparkException(errMsg)
-          if (allowMultipleContexts) {
-            logWarning("Multiple running SparkContexts detected in the same JVM!", exception)
-          } else {
-            throw exception
-          }
-        }
+      sc: SparkContext): Unit = {
+    Option(activeContextWithUser.get(sc.sparkUser)).filter(_ ne sc).foreach { ctx =>
+      val errMsg =
+        s"""
+          |Only one SparkContext could be run by [${sc._sparkUser}] in this JVM.
+          | The currently running SparkContext was created at:\n ${ctx.creationSite.longForm}.
+          | You can try to initialize a SparkContext with a different user.
+        """.stripMargin
+      throw new SparkException(errMsg)
+    }
 
-      contextBeingConstructed.filter(_ ne sc).foreach { otherContext =>
-        // Since otherContext might point to a partially-constructed context, guard against
-        // its creationSite field being null:
-        val otherContextCreationSite =
-          Option(otherContext.creationSite).map(_.longForm).getOrElse("unknown location")
-        val warnMsg = "Another SparkContext is being constructed (or threw an exception in its" +
-          " constructor).  This may indicate an error, since only one SparkContext may be" +
-          " running in this JVM (see SPARK-2243)." +
-          s" The other SparkContext was created at:\n$otherContextCreationSite"
-        logWarning(warnMsg)
-      }
+    Option(contextBeingConstructedWithUser.get(sc.sparkUser)).filter(_ ne sc).foreach { otherCtx =>
+      // Since otherContext might point to a partially-constructed context, guard against
+      // its creationSite field being null:
+      val otherContextCreationSite =
+        Option(otherCtx.creationSite).map(_.longForm).getOrElse("unknown location")
+      val warnMsg =
+        s"""
+          |Another SparkContext for ${sc._sparkUser} is being constructed
+          | (or threw an exception in its constructor).
+          | This may indicate an error, since Only one SparkContext
+          | could be run by [${sc._sparkUser}] in this JVM.
+          | The other SparkContext was created at:\n$otherContextCreationSite
+        """.stripMargin
+      logWarning(warnMsg)
     }
   }
 
@@ -2316,38 +2306,18 @@ object SparkContext extends Logging {
    * @note This function cannot be used to create multiple SparkContext instances
    * even if multiple contexts are allowed.
    */
-  def getOrCreate(config: SparkConf): SparkContext = {
+  def getOrCreate(config: SparkConf, user: Option[String] = None): SparkContext = {
     // Synchronize to ensure that multiple create requests don't trigger an exception
     // from assertNoOtherContextIsRunning within setActiveContext
-    SPARK_CONTEXT_CONSTRUCTOR_LOCK.synchronized {
-      if (activeContext.get() == null) {
-        setActiveContext(new SparkContext(config), allowMultipleContexts = false)
-      } else {
-        if (config.getAll.nonEmpty) {
-          logWarning("Using an existing SparkContext; some configuration may not take effect.")
-        }
+    val currentUser = user.getOrElse(Utils.getCurrentUserName())
+    if (activeContextWithUser.get(currentUser) == null) {
+      setActiveContext(new SparkContext(config, Some(currentUser)))
+    } else {
+      if (config.getAll.nonEmpty) {
+        logWarning("Using an existing SparkContext; some configuration may not take effect.")
       }
-      activeContext.get()
     }
-  }
-
-  /**
-   * This function may be used to get or instantiate a SparkContext and register it as a
-   * singleton object. Because we can only have one active SparkContext per JVM,
-   * this is useful when applications may wish to share a SparkContext.
-   *
-   * This method allows not passing a SparkConf (useful if just retrieving).
-   *
-   * @note This function cannot be used to create multiple SparkContext instances
-   * even if multiple contexts are allowed.
-   */
-  def getOrCreate(): SparkContext = {
-    SPARK_CONTEXT_CONSTRUCTOR_LOCK.synchronized {
-      if (activeContext.get() == null) {
-        setActiveContext(new SparkContext(), allowMultipleContexts = false)
-      }
-      activeContext.get()
-    }
+    activeContextWithUser.get(currentUser)
   }
 
   /**
@@ -2358,26 +2328,20 @@ object SparkContext extends Logging {
    * constructed and cases where another constructor threw an exception.
    */
   private[spark] def markPartiallyConstructed(
-      sc: SparkContext,
-      allowMultipleContexts: Boolean): Unit = {
-    SPARK_CONTEXT_CONSTRUCTOR_LOCK.synchronized {
-      assertNoOtherContextIsRunning(sc, allowMultipleContexts)
-      contextBeingConstructed = Some(sc)
-    }
+      sc: SparkContext): Unit = {
+    assertNoOtherContextIsRunning(sc)
+    contextBeingConstructedWithUser.put(sc._sparkUser, sc)
   }
 
   /**
-   * Called at the end of the SparkContext constructor to ensure that no other SparkContext has
-   * raced with this constructor and started.
+   * Called at the end of the SparkContext constructor to ensure that no other SparkContext
+   * for current user raced with this constructor and started.
    */
   private[spark] def setActiveContext(
-      sc: SparkContext,
-      allowMultipleContexts: Boolean): Unit = {
-    SPARK_CONTEXT_CONSTRUCTOR_LOCK.synchronized {
-      assertNoOtherContextIsRunning(sc, allowMultipleContexts)
-      contextBeingConstructed = None
-      activeContext.set(sc)
-    }
+      sc: SparkContext): Unit = {
+    assertNoOtherContextIsRunning(sc)
+    contextBeingConstructedWithUser.remove(sc.sparkUser)
+    activeContextWithUser.put(sc._sparkUser, sc)
   }
 
   /**
@@ -2385,17 +2349,15 @@ object SparkContext extends Logging {
    * also called in unit tests to prevent a flood of warnings from test suites that don't / can't
    * properly clean up their SparkContexts.
    */
-  private[spark] def clearActiveContext(): Unit = {
-    SPARK_CONTEXT_CONSTRUCTOR_LOCK.synchronized {
-      activeContext.set(null)
-    }
+  private[spark] def clearActiveContext(user: String): Unit = {
+    activeContextWithUser.remove(user)
   }
 
-  private[spark] val SPARK_JOB_DESCRIPTION = "spark.job.description"
-  private[spark] val SPARK_JOB_GROUP_ID = "spark.jobGroup.id"
-  private[spark] val SPARK_JOB_INTERRUPT_ON_CANCEL = "spark.job.interruptOnCancel"
-  private[spark] val RDD_SCOPE_KEY = "spark.rdd.scope"
-  private[spark] val RDD_SCOPE_NO_OVERRIDE_KEY = "spark.rdd.scope.noOverride"
+  private[spark] val SPARK_JOB_DESCRIPTION = "spark.job.description."
+  private[spark] val SPARK_JOB_GROUP_ID = "spark.jobGroup.id."
+  private[spark] val SPARK_JOB_INTERRUPT_ON_CANCEL = "spark.job.interruptOnCancel."
+  private[spark] val RDD_SCOPE_KEY = "spark.rdd.scope."
+  private[spark] val RDD_SCOPE_NO_OVERRIDE_KEY = "spark.rdd.scope.noOverride."
 
   /**
    * Executor id for the driver.  In earlier versions of Spark, this was `<driver>`, but this was

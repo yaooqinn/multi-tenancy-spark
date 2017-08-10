@@ -64,6 +64,8 @@ import org.apache.spark.util.Utils
 case class BatchEvalPythonExec(udfs: Seq[PythonUDF], output: Seq[Attribute], child: SparkPlan)
   extends SparkPlan {
 
+  override def user: String = child.user
+
   def children: Seq[SparkPlan] = child :: Nil
 
   override def producedAttributes: AttributeSet = AttributeSet(output.drop(child.output.length))

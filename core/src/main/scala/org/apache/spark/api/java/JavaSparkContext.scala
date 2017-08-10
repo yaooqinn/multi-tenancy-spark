@@ -57,6 +57,8 @@ class JavaSparkContext(val sc: SparkContext)
    */
   def this(conf: SparkConf) = this(new SparkContext(conf))
 
+  def this(conf: SparkConf, user: String) = this(new SparkContext(conf, Some(user)))
+
   /**
    * @param master Cluster URL to connect to (e.g. mesos://host:port, spark://host:port, local[4]).
    * @param appName A name for your application, to display on the cluster web UI
@@ -109,7 +111,7 @@ class JavaSparkContext(val sc: SparkContext)
 
   def isLocal: java.lang.Boolean = sc.isLocal
 
-  def sparkUser: String = sc.sparkUser
+  def sparkUser: String = sc._sparkUser
 
   def master: String = sc.master
 
