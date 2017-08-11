@@ -73,7 +73,7 @@ class FsHistoryProviderSuite extends SparkFunSuite with BeforeAndAfter with Matc
     writeFile(newAppComplete, true, None,
       SparkListenerApplicationStart(newAppComplete.getName(), Some("new-app-complete"), 1L, "test",
         None),
-      SparkListenerApplicationEnd(5L)
+      SparkListenerApplicationEnd(5L, "test")
       )
 
     // Write a new-style application log.
@@ -82,7 +82,7 @@ class FsHistoryProviderSuite extends SparkFunSuite with BeforeAndAfter with Matc
     writeFile(newAppCompressedComplete, true, None,
       SparkListenerApplicationStart(newAppCompressedComplete.getName(), Some("new-complete-lzf"),
         1L, "test", None),
-      SparkListenerApplicationEnd(4L))
+      SparkListenerApplicationEnd(4L, "test"))
 
     // Write an unfinished app, new-style.
     val newAppIncomplete = newLogFile("new2", None, inProgress = true)
@@ -131,12 +131,12 @@ class FsHistoryProviderSuite extends SparkFunSuite with BeforeAndAfter with Matc
     val logFile1 = newLogFile("new1", None, inProgress = false)
     writeFile(logFile1, true, None,
       SparkListenerApplicationStart("app1-1", Some("app1-1"), 1L, "test", None),
-      SparkListenerApplicationEnd(2L)
+      SparkListenerApplicationEnd(2L, "test")
       )
     val logFile2 = newLogFile("new2", None, inProgress = false)
     writeFile(logFile2, true, None,
       SparkListenerApplicationStart("app1-2", Some("app1-2"), 1L, "test", None),
-      SparkListenerApplicationEnd(2L)
+      SparkListenerApplicationEnd(2L, "test")
       )
     logFile2.setReadable(false, false)
 
@@ -152,7 +152,7 @@ class FsHistoryProviderSuite extends SparkFunSuite with BeforeAndAfter with Matc
     val logFile1 = newLogFile("app1", None, inProgress = true)
     writeFile(logFile1, true, None,
       SparkListenerApplicationStart("app1", Some("app1"), 1L, "test", None),
-      SparkListenerApplicationEnd(2L)
+      SparkListenerApplicationEnd(2L, "test")
     )
     updateAndCheck(provider) { list =>
       list.size should be (1)
@@ -186,7 +186,7 @@ class FsHistoryProviderSuite extends SparkFunSuite with BeforeAndAfter with Matc
     val logFile1 = newLogFile("app1", None, inProgress = true)
     writeFile(logFile1, true, None,
       SparkListenerApplicationStart("app1", Some("app1"), 1L, "test", None),
-      SparkListenerApplicationEnd(2L))
+      SparkListenerApplicationEnd(2L, "test"))
 
     val oldLog = new File(testDir, "old1")
     oldLog.mkdir()
@@ -223,7 +223,7 @@ class FsHistoryProviderSuite extends SparkFunSuite with BeforeAndAfter with Matc
     val attempt3 = newLogFile("app1", Some("attempt3"), inProgress = false)
     writeFile(attempt3, true, None,
       SparkListenerApplicationStart("app1", Some("app1"), 3L, "test", Some("attempt3")),
-      SparkListenerApplicationEnd(4L)
+      SparkListenerApplicationEnd(4L, "test")
       )
 
     updateAndCheck(provider) { list =>
@@ -236,7 +236,7 @@ class FsHistoryProviderSuite extends SparkFunSuite with BeforeAndAfter with Matc
     val app2Attempt1 = newLogFile("app2", Some("attempt1"), inProgress = false)
     writeFile(attempt1, true, None,
       SparkListenerApplicationStart("app2", Some("app2"), 5L, "test", Some("attempt1")),
-      SparkListenerApplicationEnd(6L)
+      SparkListenerApplicationEnd(6L, "test")
       )
 
     updateAndCheck(provider) { list =>
@@ -264,14 +264,14 @@ class FsHistoryProviderSuite extends SparkFunSuite with BeforeAndAfter with Matc
     val log1 = newLogFile("app1", Some("attempt1"), inProgress = false)
     writeFile(log1, true, None,
       SparkListenerApplicationStart("app1", Some("app1"), 1L, "test", Some("attempt1")),
-      SparkListenerApplicationEnd(2L)
+      SparkListenerApplicationEnd(2L, "test")
       )
     log1.setLastModified(0L)
 
     val log2 = newLogFile("app1", Some("attempt2"), inProgress = false)
     writeFile(log2, true, None,
       SparkListenerApplicationStart("app1", Some("app1"), 3L, "test", Some("attempt2")),
-      SparkListenerApplicationEnd(4L)
+      SparkListenerApplicationEnd(4L, "test")
       )
     log2.setLastModified(clock.getTimeMillis())
 
@@ -306,7 +306,7 @@ class FsHistoryProviderSuite extends SparkFunSuite with BeforeAndAfter with Matc
       writeFile(log, true, None,
         SparkListenerApplicationStart(
           "downloadApp1", Some("downloadApp1"), 5000 * i, "test", Some(s"attempt$i")),
-        SparkListenerApplicationEnd(5001 * i)
+        SparkListenerApplicationEnd(5001 * i, "test")
       )
       log
     }
@@ -418,7 +418,7 @@ class FsHistoryProviderSuite extends SparkFunSuite with BeforeAndAfter with Matc
     writeFile(newAppComplete, true, None,
       SparkListenerApplicationStart(newAppComplete.getName(), Some("new-app-complete"), 1L, "test",
         None),
-      SparkListenerApplicationEnd(5L)
+      SparkListenerApplicationEnd(5L, "test")
     )
 
     val provider = new FsHistoryProvider(createTestConf())

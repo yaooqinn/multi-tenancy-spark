@@ -78,7 +78,7 @@ class JsonProtocolSuite extends SparkFunSuite {
       42L, "Garfield", Some("appAttempt"))
     val applicationStartWithLogs = SparkListenerApplicationStart("The winner of all", Some("appId"),
       42L, "Garfield", Some("appAttempt"), Some(logUrlMap))
-    val applicationEnd = SparkListenerApplicationEnd(42L)
+    val applicationEnd = SparkListenerApplicationEnd(42L, "Garfield")
     val executorAdded = SparkListenerExecutorAdded(executorAddedTime, "exec1",
       new ExecutorInfo("Hostee.awesome.com", 11, logUrlMap))
     val executorRemoved = SparkListenerExecutorRemoved(executorRemovedTime, "exec2", "test reason")

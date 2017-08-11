@@ -145,7 +145,7 @@ class EventLoggingListenerSuite extends SparkFunSuite with LocalSparkContext wit
     val listenerBus = new LiveListenerBus(sc)
     val applicationStart = SparkListenerApplicationStart("Greatest App (N)ever", None,
       125L, "Mickey", None)
-    val applicationEnd = SparkListenerApplicationEnd(1000L)
+    val applicationEnd = SparkListenerApplicationEnd(1000L, "Mickey")
 
     // A comprehensive test on JSON de/serialization of all events is in JsonProtocolSuite
     eventLogger.start()

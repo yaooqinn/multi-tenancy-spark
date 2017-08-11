@@ -117,6 +117,7 @@ private[hive] class SparkSQLSessionManager(hiveServer: HiveServer2)
     val (rangerUser, _, database) = configureSession(sessionConf)
 
     val sparkSession = getUserSession(username)
+    sparkSession.conf.set("spark.sql.hive.version", HiveUtils.hiveExecutionVersion)
 
     // 1. `metastoreUser` is necessary to create a client which will specify SessionState's user;
     // 2. Reuse sharedSession's client to avoid creating a new classLoader;
@@ -129,13 +130,15 @@ private[hive] class SparkSQLSessionManager(hiveServer: HiveServer2)
       }
     })
 
-    sparkSession.conf.set("spark.sql.hive.version", HiveUtils.hiveExecutionVersion)
-
-    if (rangerUser.isDefined) {
-      val statement = s"set hivevar:ranger.user.name = ${rangerUser.get}"
-      sparkSession.sql(statement)
-    }
-    sparkSession.sql(database.get)
+    sessionUGI.doAs( new PrivilegedExceptionAction[Unit] {
+      override def run(): Unit = {
+        if (rangerUser.isDefined) {
+          val statement = s"set hivevar:ranger.user.name = ${rangerUser.get}"
+          sparkSession.sql(statement)
+        }
+        sparkSession.sql(database.get)
+      }
+    })
 
     sparkSqlOperationManager.sessionToSparkSession.put(sessionHandle, sparkSession)
     sparkSqlOperationManager.sessionToClient.put(sessionHandle, client)

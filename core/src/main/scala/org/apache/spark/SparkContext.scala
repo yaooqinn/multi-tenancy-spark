@@ -19,7 +19,7 @@ package org.apache.spark
 
 import java.io._
 import java.lang.reflect.Constructor
-import java.net.{URI}
+import java.net.URI
 import java.util.{Arrays, Locale, Properties, ServiceLoader, UUID}
 import java.util.concurrent.{ConcurrentHashMap, ConcurrentMap}
 import java.util.concurrent.atomic.{AtomicBoolean, AtomicInteger}
@@ -29,7 +29,7 @@ import scala.collection.Map
 import scala.collection.generic.Growable
 import scala.collection.mutable.HashMap
 import scala.language.implicitConversions
-import scala.reflect.{classTag, ClassTag}
+import scala.reflect.{ClassTag, classTag}
 import scala.util.control.NonFatal
 
 import com.google.common.collect.MapMaker
@@ -514,6 +514,13 @@ class SparkContext(config: SparkConf, user: Option[String]) extends Logging {
     _taskScheduler = ts
     _dagScheduler = new DAGScheduler(this)
     _heartbeatReceiver.ask[Boolean](TaskSchedulerIsSet)
+
+    // SPARK-8851: In yarn-client mode, the AM still does the credentials refresh. The driver
+    // reads the credentials from HDFS, just like the executors and updates its own credentials
+    // cache.
+    if (conf.contains("spark.yarn.credentials.file")) {
+      SparkHadoopUtil.get.startCredentialUpdater(conf)
+    }
 
     // start TaskScheduler after taskScheduler sets DAGScheduler reference in DAGScheduler's
     // constructor
@@ -1855,6 +1862,10 @@ class SparkContext(config: SparkConf, user: Option[String]) extends Logging {
       }
       SparkEnv.set(_sparkUser, null)
     }
+
+    Utils.tryLogNonFatalError {
+      SparkHadoopUtil.get.stopCredentialUpdater
+    }
     // Unset YARN mode system env variable, to allow switching between cluster types.
     System.clearProperty("SPARK_YARN_MODE")
     SparkContext.clearActiveContext(_sparkUser)
@@ -2220,7 +2231,7 @@ class SparkContext(config: SparkConf, user: Option[String]) extends Logging {
 
   /** Post the application end event */
   private def postApplicationEnd() {
-    listenerBus.post(SparkListenerApplicationEnd(System.currentTimeMillis))
+    listenerBus.post(SparkListenerApplicationEnd(System.currentTimeMillis, sparkUser))
   }
 
   /** Post the environment update event once the task scheduler is ready */
