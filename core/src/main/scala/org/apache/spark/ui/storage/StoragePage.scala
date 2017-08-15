@@ -61,7 +61,8 @@ private[ui] class StoragePage(parent: StorageTab) extends WebUIPage("") {
     // scalastyle:off
     <tr>
       <td>
-        <a href={"%s/storage/rdd?id=%s".format(UIUtils.prependBaseUri(parent.basePath), rdd.id)}>
+        <a href={"%s/storage/rdd?id=%s".format(UIUtils.prependBaseUri(parent.basePath,
+          sparkUser = parent.sparkUser), rdd.id)}>
           {rdd.name}
         </a>
       </td>

@@ -43,19 +43,19 @@ private[ui] class AllStagesPage(parent: StagesTab) extends WebUIPage("") {
       val activeStagesTable =
         new StageTableBase(request, activeStages, "active", "activeStage", parent.basePath, subPath,
           parent.progressListener, parent.isFairScheduler,
-          killEnabled = parent.killEnabled, isFailedStage = false)
+          killEnabled = parent.killEnabled, isFailedStage = false, parent.sparkUser)
       val pendingStagesTable =
         new StageTableBase(request, pendingStages, "pending", "pendingStage", parent.basePath,
           subPath, parent.progressListener, parent.isFairScheduler,
-          killEnabled = false, isFailedStage = false)
+          killEnabled = false, isFailedStage = false, parent.sparkUser)
       val completedStagesTable =
         new StageTableBase(request, completedStages, "completed", "completedStage", parent.basePath,
           subPath, parent.progressListener, parent.isFairScheduler,
-          killEnabled = false, isFailedStage = false)
+          killEnabled = false, isFailedStage = false, parent.sparkUser)
       val failedStagesTable =
         new StageTableBase(request, failedStages, "failed", "failedStage", parent.basePath, subPath,
           parent.progressListener, parent.isFairScheduler,
-          killEnabled = false, isFailedStage = true)
+          killEnabled = false, isFailedStage = true, parent.sparkUser)
 
       // For now, pool information is only accessible in live UIs
       val pools = sc.map(_.getAllPools).getOrElse(Seq.empty[Schedulable])

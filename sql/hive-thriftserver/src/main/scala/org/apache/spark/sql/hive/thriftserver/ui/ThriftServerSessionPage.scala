@@ -85,7 +85,8 @@ private[ui] class ThriftServerSessionPage(parent: ThriftServerTab)
 
       def generateDataRow(info: ExecutionInfo): Seq[Node] = {
         val jobLink = info.jobId.map { id: String =>
-          <a href={"%s/jobs/job?id=%s".format(UIUtils.prependBaseUri(parent.basePath), id)}>
+          <a href={"%s/jobs/job?id=%s".format(UIUtils.prependBaseUri(parent.basePath,
+            sparkUser = parent.sparkUser), id)}>
             [{id}]
           </a>
         }

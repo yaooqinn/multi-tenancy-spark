@@ -90,11 +90,16 @@ class ExecutionPage(parent: SQLTab) extends WebUIPage("execution") with Logging 
 
   private def planVisualizationResources: Seq[Node] = {
     // scalastyle:off
-    <link rel="stylesheet" href={UIUtils.prependBaseUri("/static/sql/spark-sql-viz.css")} type="text/css"/>
-    <script src={UIUtils.prependBaseUri("/static/d3.min.js")}></script>
-    <script src={UIUtils.prependBaseUri("/static/dagre-d3.min.js")}></script>
-    <script src={UIUtils.prependBaseUri("/static/graphlib-dot.min.js")}></script>
-    <script src={UIUtils.prependBaseUri("/static/sql/spark-sql-viz.js")}></script>
+    <link rel="stylesheet" href={UIUtils.prependBaseUri("/static/sql/spark-sql-viz.css",
+    sparkUser = parent.sparkUser)} type="text/css"/>
+    <script src={UIUtils.prependBaseUri("/static/d3.min.js",
+    sparkUser = parent.sparkUser)}></script>
+    <script src={UIUtils.prependBaseUri("/static/dagre-d3.min.js",
+    parent.sparkUser)}></script>
+    <script src={UIUtils.prependBaseUri("/static/graphlib-dot.min.js",
+    sparkUser = parent.sparkUser)}></script>
+    <script src={UIUtils.prependBaseUri("/static/sql/spark-sql-viz.js",
+    sparkUser = parent.sparkUser)}></script>
     // scalastyle:on
   }
 
@@ -119,7 +124,7 @@ class ExecutionPage(parent: SQLTab) extends WebUIPage("execution") with Logging 
   }
 
   private def jobURL(jobId: Long): String =
-    "%s/jobs/job?id=%s".format(UIUtils.prependBaseUri(parent.basePath), jobId)
+    "%s/jobs/job?id=%s".format(UIUtils.prependBaseUri(parent.basePath, parent.sparkUser), jobId)
 
   private def physicalPlanDescription(physicalPlanDescription: String): Seq[Node] = {
     <div>

@@ -155,10 +155,12 @@ private[ui] abstract class ExecutionTable(
   }
 
   private def jobURL(jobId: Long): String =
-    "%s/jobs/job?id=%s".format(UIUtils.prependBaseUri(parent.basePath), jobId)
+    "%s/jobs/job?id=%s".format(UIUtils.prependBaseUri(parent.basePath,
+      sparkUser = parent.sparkUser), jobId)
 
   private def executionURL(executionID: Long): String =
-    s"${UIUtils.prependBaseUri(parent.basePath)}/${parent.prefix}/execution?id=$executionID"
+    s"${UIUtils.prependBaseUri(parent.basePath,
+      sparkUser = parent.sparkUser)}/${parent.prefix}/execution?id=$executionID"
 }
 
 private[ui] class RunningExecutionTable(

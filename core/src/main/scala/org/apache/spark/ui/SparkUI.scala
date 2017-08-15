@@ -137,7 +137,13 @@ private[spark] abstract class SparkUITab(parent: SparkUI, prefix: String)
   extends WebUITab(parent, prefix) {
 
   def appName: String = parent.getAppName
-
+  
+  // For Job/Executor/Storage/Stage UITab all extends `SparkUITab`,
+  // we need `sparkUser` to identify different application in all those UITabs.
+  val sparkUser: String = parent.sc match {
+    case Some(sc) => sc.sparkUser
+    case None => Utils.getCurrentUserName()
+  }
 }
 
 private[spark] object SparkUI {

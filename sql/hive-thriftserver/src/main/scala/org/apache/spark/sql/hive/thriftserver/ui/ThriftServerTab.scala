@@ -27,13 +27,14 @@ import org.apache.spark.ui.{SparkUI, SparkUITab}
  * Spark Web UI tab that shows statistics of jobs running in the thrift server.
  * This assumes the given SparkContext has enabled its SparkUI.
  */
-private[thriftserver] class ThriftServerTab(sparkContext: SparkContext)
+private[thriftserver] class ThriftServerTab(userName: String, sparkContext: SparkContext)
   extends SparkUITab(getSparkUI(sparkContext), "sqlserver") with Logging {
 
   override val name = "JDBC/ODBC Server"
 
   val parent = getSparkUI(sparkContext)
-  val listener = HiveThriftServer2.listener
+  // ThriftServerTab renders by different listener's content, identified by user.
+  val listener = HiveThriftServer2.serverListeners(userName)
 
   attachPage(new ThriftServerPage(this))
   attachPage(new ThriftServerSessionPage(this))
