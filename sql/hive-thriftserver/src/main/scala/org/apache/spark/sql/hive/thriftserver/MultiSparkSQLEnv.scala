@@ -39,16 +39,16 @@ private[hive] object MultiSparkSQLEnv extends Logging{
   logInfo("Initializing multiple Spark SQL Environments...")
 
   val version = SPARK_VERSION
-
   val originConf = new SparkConf(loadDefaults = true)
-
-  val userToSession = new util.HashMap[String, SparkSession]()
-  val userToQueue = new util.HashMap[String, String]()
-
   val globalUgi: UserGroupInformation = UserGroupInformation.getCurrentUser
 
+  val users = originConf.get(PROXY_USERS).distinct.filter(_ != globalUgi.getShortUserName)
+
+  val userToSession = new util.HashMap[String, SparkSession]()
+
+  val userToQueue = new util.HashMap[String, String]()
+
   def init(): Unit = {
-    val users = originConf.get(PROXY_USERS).distinct.filter(_ != globalUgi.getShortUserName)
 
     require(users.nonEmpty, s"No user is configured in ${PROXY_USERS.key}, please specify the " +
       s"users who can impersonate the Real User [${globalUgi.getUserName}]")
@@ -60,6 +60,7 @@ private[hive] object MultiSparkSQLEnv extends Logging{
       val proxyUser = SparkHadoopUtil.get.createProxyUser(user, globalUgi)
 
       val userConf = originConf.clone
+      userConf.set("spark.uit.port", "0")
       userConf.set("spark.yarn.queue", userToQueue.get(user))
       userConf.set("spark.app.name", userConf.get("spark.app.name") + " to " + user)
 

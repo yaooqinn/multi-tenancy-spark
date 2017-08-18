@@ -23,14 +23,15 @@ import scala.collection.mutable
 
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.Path
-
 import org.apache.spark.{SparkConf, SparkException}
+
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.{FunctionIdentifier, TableIdentifier}
 import org.apache.spark.sql.catalyst.analysis._
 import org.apache.spark.sql.catalyst.catalog.ExternalCatalogUtils.escapePathName
 import org.apache.spark.sql.catalyst.expressions.Expression
 import org.apache.spark.sql.catalyst.util.StringUtils
+import org.apache.spark.util.Utils
 
 /**
  * An in-memory (ephemeral) implementation of the system catalog.
@@ -43,7 +44,7 @@ import org.apache.spark.sql.catalyst.util.StringUtils
  */
 class InMemoryCatalog(
     conf: SparkConf = new SparkConf,
-    hadoopConfig: Configuration = new Configuration)
+    hadoopConfig: Configuration = new Configuration, user: String = Utils.getCurrentUserName())
   extends ExternalCatalog {
 
   import CatalogTypes.TablePartitionSpec

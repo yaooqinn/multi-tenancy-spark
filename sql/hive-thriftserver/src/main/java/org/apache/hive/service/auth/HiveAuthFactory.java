@@ -55,6 +55,8 @@ import org.apache.thrift.transport.TTransportFactory;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import org.apache.spark.sql.hive.thriftserver.multitenancy.ThriftClientCLIService;
+
 /**
  * This class helps in some aspects of authentication. It creates the proper Thrift classes for the
  * given configuration as well as helps with authenticating requests.
@@ -169,6 +171,20 @@ public class HiveAuthFactory {
    * @throws LoginException
    */
   public TProcessorFactory getAuthProcFactory(ThriftCLIService service) throws LoginException {
+    if (authTypeStr.equalsIgnoreCase(AuthTypes.KERBEROS.getAuthName())) {
+      return KerberosSaslHelper.getKerberosProcessorFactory(saslServer, service);
+    } else {
+      return PlainSaslHelper.getPlainProcessorFactory(service);
+    }
+  }
+
+  /**
+   * Returns the thrift processor factory for HiveServer2 running in binary mode
+   * @param service
+   * @return
+   * @throws LoginException
+   */
+  public TProcessorFactory getAuthProcFactory(ThriftClientCLIService service) throws LoginException {
     if (authTypeStr.equalsIgnoreCase(AuthTypes.KERBEROS.getAuthName())) {
       return KerberosSaslHelper.getKerberosProcessorFactory(saslServer, service);
     } else {

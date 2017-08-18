@@ -19,7 +19,7 @@ package org.apache.spark.sql.hive.thriftserver
 
 import java.security.PrivilegedExceptionAction
 import java.sql.{Date, Timestamp}
-import java.util.{Arrays, Map => JMap, UUID}
+import java.util.{Arrays, UUID, Map => JMap}
 import java.util.concurrent.RejectedExecutionException
 
 import scala.collection.JavaConverters._
@@ -33,11 +33,12 @@ import org.apache.hive.service.cli.operation.ExecuteStatementOperation
 import org.apache.hive.service.cli.session.HiveSession
 
 import org.apache.spark.internal.Logging
-import org.apache.spark.sql.{DataFrame, Dataset, Row => SparkRow, SparkSession}
+import org.apache.spark.sql.{DataFrame, Dataset, SparkSession, Row => SparkRow}
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.execution.command.SetCommand
 import org.apache.spark.sql.hive.HiveUtils
 import org.apache.spark.sql.hive.client.HiveClient
+import org.apache.spark.sql.hive.thriftserver.multitenancy.SparkHiveSessionImpl
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 import org.apache.spark.util.{Utils => SparkUtils}
@@ -183,8 +184,13 @@ private[hive] class SparkExecuteStatementOperation(
       }
       try {
         // This submit blocks if no background threads are available to run this operation
-        val backgroundHandle =
-          parentSession.getSessionManager().submitBackgroundOperation(backgroundOperation)
+        val backgroundHandle = parentSession match {
+          case s: SparkHiveSessionImpl =>
+            s.getThriftServerSessionManager.submitBackgroundOperation(backgroundOperation)
+          case h: HiveSession =>
+            h.getSessionManager.submitBackgroundOperation(backgroundOperation)
+        }
+
         setBackgroundHandle(backgroundHandle)
       } catch {
         case rejected: RejectedExecutionException =>

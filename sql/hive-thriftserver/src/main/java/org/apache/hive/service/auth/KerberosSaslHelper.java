@@ -32,10 +32,17 @@ import org.apache.thrift.TProcessorFactory;
 import org.apache.thrift.transport.TSaslClientTransport;
 import org.apache.thrift.transport.TTransport;
 
+import org.apache.spark.sql.hive.thriftserver.multitenancy.ThriftClientCLIService;
+
 public final class KerberosSaslHelper {
 
   public static TProcessorFactory getKerberosProcessorFactory(Server saslServer,
     ThriftCLIService service) {
+    return new CLIServiceProcessorFactory(saslServer, service);
+  }
+
+  public static TProcessorFactory getKerberosProcessorFactory(Server saslServer,
+    ThriftClientCLIService service) {
     return new CLIServiceProcessorFactory(saslServer, service);
   }
 
@@ -93,10 +100,10 @@ public final class KerberosSaslHelper {
 
   private static class CLIServiceProcessorFactory extends TProcessorFactory {
 
-    private final ThriftCLIService service;
+    private final TCLIService.Iface service;
     private final Server saslServer;
 
-    CLIServiceProcessorFactory(Server saslServer, ThriftCLIService service) {
+    CLIServiceProcessorFactory(Server saslServer, TCLIService.Iface service) {
       super(null);
       this.service = service;
       this.saslServer = saslServer;
