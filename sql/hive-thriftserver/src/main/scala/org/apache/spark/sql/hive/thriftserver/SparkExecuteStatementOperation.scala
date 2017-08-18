@@ -206,13 +206,20 @@ private[hive] class SparkExecuteStatementOperation(
     // Always use the latest class loader provided by executionHive's state.
     val executionHiveClassLoader = sparkSession.sharedState.jarClassLoader
     Thread.currentThread().setContextClassLoader(executionHiveClassLoader)
-
-    HiveThriftServer2.listener.onStatementStart(
-      statementId,
-      parentSession.getSessionHandle.getSessionId.toString,
-      statement,
-      statementId,
-      parentSession.getUsername)
+    
+    // For multi-tenant mode, we need identify different user/session, so
+    // we can display in different webUI, or we may be confused in the webUI.
+    val listeners = ArrayBuffer[AbstractHiveThriftServer2Listener]()
+    listeners += HiveThriftServer2.serverListeners(parentSession.getUserName)
+  
+    listeners.foreach(listener =>
+      listener.onStatementStart(
+        statementId,
+        parentSession.getSessionHandle.getSessionId.toString,
+        statement,
+        statementId,
+        parentSession.getUsername))
+    
     sparkSession.sparkContext.setJobGroup(statementId, statement)
     val pool = sessionToActivePool.get(parentSession.getSessionHandle)
     if (pool != null) {
@@ -228,7 +235,9 @@ private[hive] class SparkExecuteStatementOperation(
           logInfo(s"Setting spark.scheduler.pool=$value for future statements in this session.")
         case _ =>
       }
-      HiveThriftServer2.listener.onStatementParsed(statementId, result.queryExecution.toString())
+      // To avoid result too long, only record physical plan string.
+      listeners.foreach( listener =>
+        listener.onStatementParsed(statementId, result.queryExecution.simpleString))
       iter = {
         val useIncrementalCollect =
           sparkSession.conf.get("spark.sql.thriftServer.incrementalCollect", "false").toBoolean
@@ -244,8 +253,9 @@ private[hive] class SparkExecuteStatementOperation(
       dataTypes = result.queryExecution.analyzed.output.map(_.dataType).toArray
     } catch {
       case e: HiveSQLException =>
-        HiveThriftServer2.listener.onStatementError(
-          statementId, e.getMessage, SparkUtils.exceptionString(e))
+        listeners.foreach(listener =>
+          listener.onStatementError(
+            statementId, e.getMessage, SparkUtils.exceptionString(e)))
         if (getStatus().getState() == OperationState.CANCELED) {
           return
         } else {
@@ -257,8 +267,9 @@ private[hive] class SparkExecuteStatementOperation(
       case e: Throwable =>
         val currentState = getStatus.getState
         logError(s"Error executing query, currentState $currentState, ", e)
-        HiveThriftServer2.listener.onStatementError(
-          statementId, e.getMessage, SparkUtils.exceptionString(e))
+        listeners.foreach(listener =>
+          listener.onStatementError(
+            statementId, e.getMessage, SparkUtils.exceptionString(e)))
         if (statementId != null) {
           sparkSession.sparkContext.cancelJobGroup(statementId)
         }
@@ -271,7 +282,8 @@ private[hive] class SparkExecuteStatementOperation(
         }
         throw new HiveSQLException(e.toString)
     }
-    HiveThriftServer2.listener.onStatementFinish(statementId)
+    listeners.foreach(listener =>
+      listener.onStatementFinish(statementId))
     getStatus.getState match {
       case OperationState.CANCELED =>
       case OperationState.FINISHED =>

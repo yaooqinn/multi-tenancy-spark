@@ -2221,6 +2221,11 @@ class SparkContext(config: SparkConf, user: Option[String]) extends Logging {
     _listenerBusStarted = true
   }
 
+  /** Trigger the application start event in many tenant mode. */
+  def triggerApplicationStart(): Unit = {
+    postApplicationStart()
+  }
+
   /** Post the application start event */
   private def postApplicationStart() {
     // Note: this code assumes that the task scheduler has been initialized and has contacted

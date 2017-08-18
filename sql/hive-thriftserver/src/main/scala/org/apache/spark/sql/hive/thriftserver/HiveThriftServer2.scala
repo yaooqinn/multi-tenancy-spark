@@ -34,7 +34,7 @@ import org.apache.hive.service.server.HiveServer2
 import org.apache.spark.{SparkConf, SparkContext}
 import org.apache.spark.deploy.SparkHadoopUtil
 import org.apache.spark.internal.Logging
-import org.apache.spark.scheduler.{SparkListener, SparkListenerApplicationEnd, SparkListenerJobStart}
+import org.apache.spark.scheduler.{SparkListenerApplicationEnd, SparkListenerJobStart}
 import org.apache.spark.sql.hive.thriftserver.ui.ThriftServerTab
 import org.apache.spark.sql.hive.thriftserver.ReflectionUtils._
 import org.apache.spark.sql.internal.SQLConf
@@ -47,7 +47,8 @@ import org.apache.spark.util.{ShutdownHookManager, Utils}
 object HiveThriftServer2 extends Logging {
   var LOG = LogFactory.getLog(classOf[HiveServer2])
   var uiTabs: List[ThriftServerTab] = Nil
-  var listener: HiveThriftServer2Listener = _
+  
+  var serverListeners = new mutable.HashMap[String, HiveThriftServer2Listener]()
 
   def main(args: Array[String]) {
     Utils.initDaemon(log)
@@ -61,7 +62,7 @@ object HiveThriftServer2 extends Logging {
       MultiSparkSQLEnv.stop()
       uiTabs.foreach(_.detach())
     }
-
+    
     val hiveConf = new HiveConf(classOf[SessionState])
     val hadoopConf = SparkHadoopUtil.get.newConfiguration(MultiSparkSQLEnv.originConf)
     hadoopConf.iterator().asScala.foreach { entry =>
@@ -75,11 +76,25 @@ object HiveThriftServer2 extends Logging {
       server.init(hiveConf)
       server.start()
       logInfo("HiveThriftServer2 started")
-      listener = new HiveThriftServer2Listener(server, MultiSparkSQLEnv.originConf)
-      MultiSparkSQLEnv.userToSession.values().asScala.foreach { ss =>
-        ss.sparkContext.addSparkListener(listener)
-        val uiTab = new ThriftServerTab(ss.sparkContext)
+      
+      MultiSparkSQLEnv.userToSession.asScala.foreach(userSession => {
+        val user = userSession._1
+        val ss = userSession._2
+        
+        val serverListener = new HiveThriftServer2Listener(server, MultiSparkSQLEnv.originConf)
+        serverListeners(user) = serverListener
+        ss.sparkContext.addSparkListener(serverListener)
+        
+        val uiTab = new ThriftServerTab(user, ss.sparkContext)
         uiTabs = uiTab :: uiTabs
+      })
+
+      // `ApplicationStartEvent` is triggered in `SparkContext` initialization,
+      // however in multi-tenant mode, HiveThriftServerListener is started after
+      // mutli `SparkContext` initialization, so if you want to listen
+      // `ApplicationStartEvent`, must trigger the applicationStart event mannuly.
+      MultiSparkSQLEnv.userToSession.values().asScala.foreach{ ss =>
+        ss.sparkContext.triggerApplicationStart()
       }
 
       // If application was killed before HiveThriftServer2 start successfully then SparkSubmit
@@ -148,11 +163,14 @@ object HiveThriftServer2 extends Logging {
    */
   private[thriftserver] class HiveThriftServer2Listener(
       val server: HiveServer2,
-      val conf: SparkConf) extends SparkListener {
+      val conf: SparkConf) extends AbstractHiveThriftServer2Listener {
 
     override def onApplicationEnd(applicationEnd: SparkListenerApplicationEnd): Unit = {
-      MultiSparkSQLEnv.userToSession.remove(applicationEnd.sparkUser)
-      if (MultiSparkSQLEnv.userToSession.size() == 0) server.stop()
+      if (MultiSparkSQLEnv.userToSession.asScala.forall {
+        case ((_, ss)) => ss.sparkContext.isStopped
+      }) {
+        server.stop()
+      }
     }
 
     private var onlineSessionNum: Int = 0
@@ -187,7 +205,8 @@ object HiveThriftServer2 extends Logging {
       }
     }
 
-    def onSessionCreated(ip: String, sessionId: String, userName: String = "UNKNOWN"): Unit = {
+    override  def onSessionCreated(ip: String, sessionId: String, userName: String = "UNKNOWN",
+                      proxyUser: String, rangerUser: String): Unit = {
       synchronized {
         val info = new SessionInfo(sessionId, System.currentTimeMillis, ip, userName)
         sessionList.put(sessionId, info)
@@ -196,13 +215,13 @@ object HiveThriftServer2 extends Logging {
       }
     }
 
-    def onSessionClosed(sessionId: String): Unit = synchronized {
+    override def onSessionClosed(sessionId: String): Unit = synchronized {
       sessionList(sessionId).finishTimestamp = System.currentTimeMillis
       onlineSessionNum -= 1
       trimSessionIfNecessary()
     }
 
-    def onStatementStart(
+    override def onStatementStart(
         id: String,
         sessionId: String,
         statement: String,
@@ -217,12 +236,12 @@ object HiveThriftServer2 extends Logging {
       totalRunning += 1
     }
 
-    def onStatementParsed(id: String, executionPlan: String): Unit = synchronized {
+    override def onStatementParsed(id: String, executionPlan: String): Unit = synchronized {
       executionList(id).executePlan = executionPlan
       executionList(id).state = ExecutionState.COMPILED
     }
 
-    def onStatementError(id: String, errorMessage: String, errorTrace: String): Unit = {
+    override def onStatementError(id: String, errorMessage: String, errorTrace: String): Unit = {
       synchronized {
         executionList(id).finishTimestamp = System.currentTimeMillis
         executionList(id).detail = errorMessage
