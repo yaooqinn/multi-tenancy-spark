@@ -74,12 +74,18 @@ private[spark] class YarnClientSchedulerBackend(
    */
   private def waitForApplication(): Unit = {
     assert(client != null && appId.isDefined, "Application has not been submitted yet!")
-    val (state, _) = client.monitorApplication(appId.get, returnOnRunning = true) // blocking
+    val (state, _) = client.monitorApplication(
+      appId.get, returnOnRunning = true, isCalledFromStart = true) // blocking
     if (state == YarnApplicationState.FINISHED ||
       state == YarnApplicationState.FAILED ||
       state == YarnApplicationState.KILLED) {
       throw new SparkException("Yarn application has already ended! " +
         "It might have been killed or unable to launch application master.")
+    }
+    if (state == YarnApplicationState.ACCEPTED) {
+      sc.stop()
+      throw new SparkException("Yarn application has stayed at ACCEPTED status for a quite long" +
+        " time. ResourceManager might be busy or your queue might have no more resources")
     }
     if (state == YarnApplicationState.RUNNING) {
       logInfo(s"Application ${appId.get} has started running.")

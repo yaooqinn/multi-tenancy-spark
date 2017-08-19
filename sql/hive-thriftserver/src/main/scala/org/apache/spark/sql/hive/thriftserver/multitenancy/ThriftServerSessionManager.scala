@@ -256,6 +256,13 @@ private[hive] class ThriftServerSessionManager private(
     val sessionUGI = hiveSession.getSessionUgi
 
     val sparkSession = getSparkSession(username, sessionConf)._1
+
+    if (sparkSession != null && !sparkSession.sparkContext.isStopped) {
+      hiveSession.setSparkSession(sparkSession)
+    } else {
+      throw new SparkException("Initialize SparkSession Failed")
+    }
+
     sparkSession.conf.set("spark.sql.hive.version", HiveUtils.hiveExecutionVersion)
 
     sessionUGI.doAs( new PrivilegedExceptionAction[Unit] {
@@ -263,7 +270,6 @@ private[hive] class ThriftServerSessionManager private(
         sparkSession.sql(getDatabase(sessionConf))
       }
     })
-    hiveSession.setSparkSession(sparkSession)
 
     if (isOperationLogEnabled) {
       hiveSession.setOperationLogSessionDir(operationLogRootDir)

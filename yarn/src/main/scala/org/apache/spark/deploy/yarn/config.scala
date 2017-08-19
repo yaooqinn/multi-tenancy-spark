@@ -133,6 +133,11 @@ package object config {
     .timeConf(TimeUnit.MILLISECONDS)
     .createWithDefaultString("1s")
 
+  private[spark] val REPORT_TIMES_ON_START = ConfigBuilder("spark.yarn.report.times.on.start")
+    .doc("times * REPORT_INTERVAL represents the total time a spark on yarn application waiting" +
+      " for its state turn into running")
+    .intConf.createWithDefault(60)
+
   /* Shared Client-mode AM / Driver configuration. */
 
   private[spark] val AM_MAX_WAIT_TIME = ConfigBuilder("spark.yarn.am.waitTime")
