@@ -28,13 +28,14 @@ import scala.collection.JavaConverters._
 import org.apache.commons.io.FileUtils
 import org.apache.hadoop.hive.conf.HiveConf
 import org.apache.hadoop.hive.conf.HiveConf.ConfVars
+import org.apache.hadoop.security.UserGroupInformation
 import org.apache.hive.service.CompositeService
 import org.apache.hive.service.cli.{HiveSQLException, SessionHandle}
 import org.apache.hive.service.cli.session.HiveSession
 import org.apache.hive.service.cli.thrift.TProtocolVersion
 import org.apache.hive.service.server.ThreadFactoryWithGarbageCleanup
-import org.apache.spark.{SparkConf, SparkException}
 
+import org.apache.spark.{SparkConf, SparkException}
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.hive.HiveUtils
@@ -203,19 +204,31 @@ private[hive] class ThriftServerSessionManager private(
   }
 
   def getSparkSession(
-      user: String, sessionConf: JMap[String, String]): (SparkSession, AtomicInteger) = {
-    val kv = userToSparkSession.get(user)
+      user: UserGroupInformation,
+      sessionConf: JMap[String, String]): SparkSession = {
+    val userName = user.getShortUserName
+    val kv = userToSparkSession.get(userName)
     if (kv == null) {
       val conf = sparkConf.clone
       conf.setAppName(s"SparkThriftServer[$user]")
       conf.set("spark.ui.port", "0") // avoid max port retry reach
       setQueue(sessionConf, conf)
-      val sparkSession = SparkSession.builder().config(conf).user(user).getOrCreate()
-      val times = new AtomicInteger(1)
-      userToSparkSession.put(user, (sparkSession, times))
+      try {
+        val sparkSession = user.doAs(new PrivilegedExceptionAction[SparkSession] {
+          override def run(): SparkSession = {
+            SparkSession.builder().config(conf).user(userName).getOrCreate()
+          }
+        })
+        val times = new AtomicInteger(1)
+        userToSparkSession.put(userName, (sparkSession, times))
+        sparkSession
+      } catch {
+        case e: Exception =>
+          throw new SparkException("Failed Init SparkSession" + e, e)
+      }
     } else {
       logInfo(s"SparkSession for [$user] is reused " + kv._2.incrementAndGet() + "times")
-      kv
+      kv._1
     }
   }
 
@@ -255,7 +268,7 @@ private[hive] class ThriftServerSessionManager private(
 
     val sessionUGI = hiveSession.getSessionUgi
 
-    val sparkSession = getSparkSession(username, sessionConf)._1
+    val sparkSession = getSparkSession(sessionUGI, sessionConf)
 
     if (sparkSession != null && !sparkSession.sparkContext.isStopped) {
       hiveSession.setSparkSession(sparkSession)
@@ -265,7 +278,7 @@ private[hive] class ThriftServerSessionManager private(
 
     sparkSession.conf.set("spark.sql.hive.version", HiveUtils.hiveExecutionVersion)
 
-    sessionUGI.doAs( new PrivilegedExceptionAction[Unit] {
+    sessionUGI.doAs(new PrivilegedExceptionAction[Unit] {
       override def run(): Unit = {
         sparkSession.sql(getDatabase(sessionConf))
       }

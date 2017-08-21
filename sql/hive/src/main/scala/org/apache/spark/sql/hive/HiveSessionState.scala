@@ -33,14 +33,13 @@ private[hive] class HiveSessionState(sparkSession: SparkSession)
 
   self =>
 
-  val user = sparkSession.sparkContext.sparkUser
-
   /**
    * A Hive client used for interacting with the metastore.
    */
   lazy val metadataHive: HiveClient =
     sparkSession.sharedState
-      .externalCatalog.asInstanceOf[HiveExternalCatalog].client.newSession(user)
+      .externalCatalog.asInstanceOf[HiveExternalCatalog]
+      .client.newSession(sparkSession.sparkContext.sparkUser)
 
 
   /**
