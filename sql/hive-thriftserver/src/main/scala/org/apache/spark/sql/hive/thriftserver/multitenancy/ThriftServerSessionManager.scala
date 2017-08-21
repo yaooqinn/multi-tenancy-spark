@@ -216,7 +216,11 @@ private[hive] class ThriftServerSessionManager private(
       try {
         val sparkSession = user.doAs(new PrivilegedExceptionAction[SparkSession] {
           override def run(): SparkSession = {
-            SparkSession.builder().config(conf).user(userName).getOrCreate()
+            SparkSession.builder()
+              .config(conf)
+              .enableHiveSupport()
+              .user(userName)
+              .getOrCreate()
           }
         })
         val times = new AtomicInteger(1)

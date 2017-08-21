@@ -83,6 +83,10 @@ class SparkHiveSessionImpl(
 
   def getSparkSession(): SparkSession = sparkSession
 
+  def removeSparkSession(): Unit = {
+    sparkSession = null
+  }
+
   def getSessionUgi: UserGroupInformation = sessionUGI
 
   private[this] def acquire(userAccess: Boolean): Unit = {
@@ -123,7 +127,6 @@ class SparkHiveSessionImpl(
   }
 
   override def open(sessionConfMap: Map[String, String]): Unit = {
-
     lastAccessTime = System.currentTimeMillis
     lastIdleTime = lastAccessTime
   }
@@ -138,7 +141,7 @@ class SparkHiveSessionImpl(
       getInfoType match {
         case GetInfoType.CLI_SERVER_NAME => new GetInfoValue("Spark SQL")
         case GetInfoType.CLI_DBMS_NAME => new GetInfoValue("Spark SQL")
-        case GetInfoType.CLI_DBMS_VER => new GetInfoValue(sparkSession.version)
+        case GetInfoType.CLI_DBMS_VER => new GetInfoValue(getSparkSession().version)
         case _ =>
           throw new SparkException("Unrecognized GetInfoType value: " + getInfoType.toString)
       }
@@ -226,6 +229,7 @@ class SparkHiveSessionImpl(
       opHandleSet.clear()
       // Cleanup session log directory.
       cleanupSessionLogDir()
+      removeSparkSession()
     } finally {
       release(true)
       try
