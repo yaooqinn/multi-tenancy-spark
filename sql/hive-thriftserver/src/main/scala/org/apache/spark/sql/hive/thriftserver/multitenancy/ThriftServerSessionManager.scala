@@ -34,8 +34,8 @@ import org.apache.hive.service.cli.{HiveSQLException, SessionHandle}
 import org.apache.hive.service.cli.session.HiveSession
 import org.apache.hive.service.cli.thrift.TProtocolVersion
 import org.apache.hive.service.server.ThreadFactoryWithGarbageCleanup
-import org.apache.spark.{SparkConf, SparkContext, SparkException}
 
+import org.apache.spark.{SparkConf, SparkContext, SparkException}
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.hive.HiveUtils
@@ -288,6 +288,7 @@ private[hive] class ThriftServerSessionManager private(
     if (sparkSession != null && !sparkSession.sparkContext.isStopped) {
       hiveSession.setSparkSession(sparkSession)
     } else {
+      userToSparkSession.remove(username)
       throw new SparkException("Initialize SparkSession Failed")
     }
 

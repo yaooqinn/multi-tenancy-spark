@@ -155,7 +155,7 @@ private[hive] class SparkExecuteStatementOperation(
     if (!runInBackground) {
       execute()
     } else {
-      val sparkServiceUGI = Utils.getUGI
+      val sparkServiceUGI = parentSession.getSessionUgi
 
       // Runnable impl to call runInternal asynchronously,
       // from a different thread

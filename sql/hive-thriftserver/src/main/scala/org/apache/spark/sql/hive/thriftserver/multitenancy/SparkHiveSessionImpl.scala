@@ -33,8 +33,8 @@ import org.apache.hive.service.cli._
 import org.apache.hive.service.cli.operation.{Operation, OperationManager}
 import org.apache.hive.service.cli.session.{HiveSession, SessionManager}
 import org.apache.hive.service.cli.thrift.TProtocolVersion
-import org.apache.spark.{CredentialCache, SparkException}
 
+import org.apache.spark.{CredentialCache, SparkException}
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.SparkSession
 
@@ -81,13 +81,13 @@ class SparkHiveSessionImpl(
 
   def setSparkSession(sparkSession: SparkSession): Unit = this.sparkSession = sparkSession
 
-  def getSparkSession(): SparkSession = sparkSession
+  def getSparkSession(): SparkSession = this.sparkSession
 
   def removeSparkSession(): Unit = {
     sparkSession = null
   }
 
-  def getSessionUgi: UserGroupInformation = sessionUGI
+  def getSessionUgi: UserGroupInformation = this.sessionUGI
 
   private[this] def acquire(userAccess: Boolean): Unit = {
     if (userAccess) {
