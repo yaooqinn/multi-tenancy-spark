@@ -2349,6 +2349,10 @@ object SparkContext extends Logging {
     contextBeingConstructedWithUser.put(sc._sparkUser, sc)
   }
 
+  private[spark] def isPartiallyConstructed(user: String) = {
+    contextBeingConstructedWithUser.containsKey(user)
+  }
+
   /**
    * Called at the end of the SparkContext constructor to ensure that no other SparkContext
    * for current user raced with this constructor and started.

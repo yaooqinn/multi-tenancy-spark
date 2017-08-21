@@ -34,8 +34,8 @@ import org.apache.hive.service.cli.{HiveSQLException, SessionHandle}
 import org.apache.hive.service.cli.session.HiveSession
 import org.apache.hive.service.cli.thrift.TProtocolVersion
 import org.apache.hive.service.server.ThreadFactoryWithGarbageCleanup
+import org.apache.spark.{SparkConf, SparkContext, SparkException}
 
-import org.apache.spark.{SparkConf, SparkException}
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.hive.HiveUtils
@@ -207,6 +207,17 @@ private[hive] class ThriftServerSessionManager private(
       user: UserGroupInformation,
       sessionConf: JMap[String, String]): SparkSession = {
     val userName = user.getShortUserName
+    // TODO: add config not hard code
+    var checkRound = 15
+    while (SparkContext.isPartiallyConstructed(userName)) {
+      sleepInterval(1000L)
+      checkRound -= 1
+      if ( checkRound <= 0) {
+        throw new SparkException(s"A partially constructed SparkContext for [$userName] " +
+          s"has last more than $checkRound seconds")
+      }
+    }
+
     val kv = userToSparkSession.get(userName)
     if (kv == null) {
       val conf = sparkConf.clone
