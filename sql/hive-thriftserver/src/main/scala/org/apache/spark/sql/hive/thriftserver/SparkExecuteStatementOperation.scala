@@ -27,6 +27,7 @@ import scala.collection.mutable.ArrayBuffer
 import scala.util.control.NonFatal
 
 import org.apache.hadoop.hive.metastore.api.FieldSchema
+import org.apache.hadoop.hive.ql.session.OperationLog
 import org.apache.hive.service.cli._
 import org.apache.hive.service.cli.operation.ExecuteStatementOperation
 import org.apache.hive.service.cli.session.HiveSession
@@ -162,6 +163,7 @@ private[hive] class SparkExecuteStatementOperation(
       val backgroundOperation = new Runnable() {
         override def run(): Unit = {
           val doAsAction = new PrivilegedExceptionAction[Unit]() {
+            registerCurrentOperationLog()
             override def run(): Unit = {
               try {
                 execute()
@@ -169,6 +171,8 @@ private[hive] class SparkExecuteStatementOperation(
                 case e: HiveSQLException =>
                   setOperationException(e)
                   logError("Error running hive query: ", e)
+              } finally {
+                unregisterOperationLog()
               }
             }
           }
@@ -305,6 +309,37 @@ private[hive] class SparkExecuteStatementOperation(
       }
     }
   }
+
+  private def registerCurrentOperationLog(): Unit = {
+    if (isOperationLogEnabled) {
+      if (operationLog == null) {
+        logWarning("Failed to get current OperationLog object of Operation: "
+          + getHandle.getHandleIdentifier)
+        isOperationLogEnabled = false
+      } else {
+        parentSession match {
+          case spark: SparkHiveSessionImpl =>
+            spark.getThriftServerSessionManager.getOperationManager
+              .setOperationLog(spark.getUserName, operationLog)
+          case _ =>
+            OperationLog.setCurrentOperationLog(operationLog)
+        }
+      }
+    }
+  }
+
+  override def unregisterOperationLog(): Unit = {
+    if (isOperationLogEnabled) {
+      parentSession match {
+        case spark: SparkHiveSessionImpl =>
+          spark.getThriftServerSessionManager.getOperationManager
+            .unregisterOperationLog(parentSession.getUserName)
+        case _ =>
+          OperationLog.removeCurrentOperationLog()
+      }
+    }
+  }
+
 }
 
 object SparkExecuteStatementOperation {

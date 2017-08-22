@@ -18,7 +18,8 @@
 package org.apache.spark.sql.hive.thriftserver.multitenancy
 
 import java.io.{File, IOException}
-import java.util.{HashSet, Map, List => JList}
+import java.security.PrivilegedExceptionAction
+import java.util.{HashSet, List => JList, Map}
 
 import scala.collection.JavaConverters._
 
@@ -127,6 +128,7 @@ class SparkHiveSessionImpl(
   }
 
   override def open(sessionConfMap: Map[String, String]): Unit = {
+    configureSession(sessionConfMap)
     lastAccessTime = System.currentTimeMillis
     lastIdleTime = lastAccessTime
   }
@@ -431,4 +433,24 @@ class SparkHiveSessionImpl(
   override def getLastAccessTime: Long = lastAccessTime
 
   override def getUserName: String = username
+
+  private[this] def configureSession(sessionConfMap: Map[String, String]): Unit = {
+    assert(sparkSession != null)
+    for (entry <- sessionConfMap.entrySet.asScala) {
+      val key = entry.getKey
+      if (key.startsWith("set:")) {
+        sparkSession.conf.set(key.substring(4), entry.getValue)
+      }
+      else if (key.startsWith("use:")) {
+        sessionUGI.doAs(new PrivilegedExceptionAction[Unit] {
+          override def run(): Unit = {
+            sparkSession.sql("use " + entry.getValue)
+          }
+        })
+      }
+      else {
+        hiveConf.verifyAndSet(key, entry.getValue)
+      }
+    }
+  }
 }

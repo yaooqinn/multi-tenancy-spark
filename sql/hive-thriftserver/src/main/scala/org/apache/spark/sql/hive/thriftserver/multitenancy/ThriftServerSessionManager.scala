@@ -201,12 +201,12 @@ private[hive] class ThriftServerSessionManager private(
     try
       Thread.sleep(interval)
     catch {
-      case e: InterruptedException =>
+      case _: InterruptedException =>
       // ignore
     }
   }
 
-  def getSparkSession(
+  private[this] def getSparkSession(
       user: UserGroupInformation,
       sessionConf: JMap[String, String]): SparkSession = {
     val userName = user.getShortUserName
@@ -224,7 +224,7 @@ private[hive] class ThriftServerSessionManager private(
     val kv = userToSparkSession.get(userName)
     if (kv == null) {
       val conf = sparkConf.clone
-      conf.setAppName(s"SparkThriftServer[$user]")
+      conf.setAppName(s"SparkThriftServer[$userName]")
       conf.set("spark.ui.port", "0") // avoid max port retry reach
       setQueue(sessionConf, conf)
       try {
@@ -250,7 +250,7 @@ private[hive] class ThriftServerSessionManager private(
           throw new SparkException("Failed Init SparkSession" + e, e)
       }
     } else {
-      logInfo(s"SparkSession for [$user] is reused " + kv._2.incrementAndGet() + "times")
+      logInfo(s"SparkSession for [$userName] is reused " + kv._2.incrementAndGet() + "times")
       kv._1
     }
   }
@@ -260,16 +260,6 @@ private[hive] class ThriftServerSessionManager private(
    * The username passed to this method is the effective username.
    * If withImpersonation is true (==doAs true) we wrap all the calls in HiveSession
    * within a UGI.doAs, where UGI corresponds to the effective user.
-   *
-   * @see org.apache.hive.service.cli.thrift.ThriftCLIService getUserName()
-   * @param protocol
-   * @param username
-   * @param password
-   * @param ipAddress
-   * @param sessionConf
-   * @param withImpersonation
-   * @param delegationToken
-   * @return SessionHandle
    */
   def openSession(
       protocol: TProtocolVersion,
@@ -283,7 +273,6 @@ private[hive] class ThriftServerSessionManager private(
     val hiveSession =
       new SparkHiveSessionImpl(protocol, realUser, username, password, hiveConf,
         ipAddress, withImpersonation, this, thriftServerOperationManager)
-    hiveSession.open(sessionConf)
     val sessionUGI = hiveSession.getSessionUgi
     val sparkSession = getSparkSession(sessionUGI, sessionConf)
     if (sparkSession != null && !sparkSession.sparkContext.isStopped) {
@@ -292,12 +281,10 @@ private[hive] class ThriftServerSessionManager private(
       userToSparkSession.remove(username)
       throw new SparkException("Initialize SparkSession Failed")
     }
+
+    hiveSession.open(sessionConf)
+
     sparkSession.conf.set("spark.sql.hive.version", HiveUtils.hiveExecutionVersion)
-    sessionUGI.doAs(new PrivilegedExceptionAction[Unit] {
-      override def run(): Unit = {
-        sparkSession.sql(getDatabase(sessionConf))
-      }
-    })
 
     if (isOperationLogEnabled) {
       hiveSession.setOperationLogSessionDir(operationLogRootDir)
@@ -345,17 +332,6 @@ private[hive] class ThriftServerSessionManager private(
     }
   }
 
-  private[this] def getDatabase(sessionConf: JMap[String, String]): String = {
-    if (sessionConf != null) {
-      sessionConf.asScala.foreach { kv =>
-        if (kv._1 == "use:database") {
-          return "use " + kv._2
-        }
-      }
-    }
-    "use default"
-  }
-
   @throws[HiveSQLException]
   def getSession(sessionHandle: SessionHandle): HiveSession = {
     val session = handleToSession.get(sessionHandle)
@@ -384,7 +360,7 @@ private[hive] class ThriftServerSessionManager private(
       backgroundOperationPool = null
     }
     cleanupLoggingRootDir()
-    userToSparkSession.asScala.values.foreach { kv => kv._1.stop }
+    userToSparkSession.asScala.values.foreach { kv => kv._1.stop() }
     userToSparkSession.clear()
   }
 

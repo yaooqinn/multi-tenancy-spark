@@ -87,6 +87,11 @@ private[multitenancy] class ThriftServerOperationManager private(name: String)
     userToOperationLog.put(Option(user).getOrElse(Utils.getCurrentUserName()), log)
   }
 
+  def unregisterOperationLog(user: String): Unit = {
+    OperationLog.removeCurrentOperationLog()
+    userToOperationLog.remove(user)
+  }
+
   def newExecuteStatementOperation(
       parentSession: HiveSession,
       statement: String,
@@ -96,7 +101,7 @@ private[multitenancy] class ThriftServerOperationManager private(name: String)
     val sessionHandle = parentSession.getSessionHandle
     val sparkSession = sessionToSparkSession.get(sessionHandle)
 
-    require(sparkSession != null, s"Session sessionHandle: ${sessionHandle} has not been" +
+    require(sparkSession != null, s"Session sessionHandle: $sessionHandle has not been" +
       s" initialized or had already closed.")
 
     val sessionState = sparkSession.sessionState.asInstanceOf[HiveSessionState]
