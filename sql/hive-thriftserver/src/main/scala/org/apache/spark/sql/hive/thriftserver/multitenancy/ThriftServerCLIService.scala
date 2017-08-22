@@ -39,7 +39,7 @@ private[hive] class ThriftServerCLIService private(
   private[this] var sessionManager: ThriftServerSessionManager = _
 
   def this(thriftServer: MultiTenancyThriftServer) = {
-    this(getClass.getSimpleName, thriftServer)
+    this(classOf[ThriftServerCLIService].getSimpleName, thriftServer)
   }
 
   override def init(hiveConf: HiveConf): Unit = synchronized {

@@ -41,7 +41,7 @@ import org.apache.spark.util.Utils
 private[multitenancy] class ThriftServerOperationManager private(name: String)
   extends AbstractService(name) with Logging {
 
-  def this() = this(getClass.getSimpleName)
+  def this() = this(classOf[ThriftServerOperationManager].getSimpleName)
 
   private[this] val handleToOperation = new JMap[OperationHandle, Operation]
 

@@ -61,7 +61,7 @@ private[multitenancy] class MultiTenancyThriftServer private (name: String)
   private[this] val started = new AtomicBoolean(false)
 
   def this() = {
-    this(getClass.getSimpleName)
+    this(classOf[MultiTenancyThriftServer].getSimpleName)
   }
 
   override def init(hiveConf: HiveConf): Unit = synchronized {

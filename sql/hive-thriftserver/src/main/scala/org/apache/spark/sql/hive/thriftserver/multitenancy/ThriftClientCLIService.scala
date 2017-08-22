@@ -72,7 +72,7 @@ class ThriftClientCLIService private(name: String, cliService: ThriftServerCLISe
   }
 
   def this(cliService: ThriftServerCLIService) = {
-    this(getClass.getSimpleName, cliService)
+    this(classOf[ThriftClientCLIService].getSimpleName, cliService)
     currentServerContext = new ThreadLocal[ServerContext]()
     serverEventHandler = new ClientTServerEventHandler
   }
@@ -586,8 +586,8 @@ class ThriftClientCLIService private(name: String, cliService: ThriftServerCLISe
       // TCP Server
       server = Some(new TThreadPoolServer(sargs))
       server.foreach(_.setServerEventHandler(serverEventHandler))
-      val msg = "Starting " + this.name + " on port " + portNum +
-        " with " + minWorkerThreads + "..." + maxWorkerThreads + " worker threads"
+      val msg = "Starting " + classOf[ThriftClientCLIService].getSimpleName + " on port " +
+        portNum + " with " + minWorkerThreads + "..." + maxWorkerThreads + " worker threads"
       logInfo(msg)
       server.foreach(_.serve())
     } catch {

@@ -370,7 +370,6 @@ private[hive] class ThriftServerSessionManager private(
   override def stop(): Unit = {
     super.stop()
     shutdown = true
-    shutdown = true
     if (backgroundOperationPool != null) {
       backgroundOperationPool.shutdown()
       val timeout =
@@ -385,6 +384,8 @@ private[hive] class ThriftServerSessionManager private(
       backgroundOperationPool = null
     }
     cleanupLoggingRootDir()
+    userToSparkSession.asScala.values.foreach { kv => kv._1.stop }
+    userToSparkSession.clear()
   }
 
   private[this] def cleanupLoggingRootDir(): Unit = {
