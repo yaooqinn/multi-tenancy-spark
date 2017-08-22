@@ -34,11 +34,13 @@ import org.apache.hive.service.cli.{HiveSQLException, SessionHandle}
 import org.apache.hive.service.cli.session.HiveSession
 import org.apache.hive.service.cli.thrift.TProtocolVersion
 import org.apache.hive.service.server.ThreadFactoryWithGarbageCleanup
-
 import org.apache.spark.{SparkConf, SparkContext, SparkException}
+
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.hive.HiveUtils
+import org.apache.spark.sql.hive.thriftserver.monitor.{MultiTenancyThriftServerListener, ThriftServerMonitor}
+import org.apache.spark.sql.hive.thriftserver.ui.ThriftServerTab
 import org.apache.spark.util.Utils
 
 private[hive] class ThriftServerSessionManager private(
@@ -183,6 +185,7 @@ private[hive] class ThriftServerSessionManager private(
             case (user, (session, times)) =>
               if (times.get() <= 0) {
                 userToSparkSession.remove(user)
+                ThriftServerMonitor.detachUITab(user)
                 session.stop()
               }
             case _ =>
@@ -236,6 +239,11 @@ private[hive] class ThriftServerSessionManager private(
         })
         val times = new AtomicInteger(1)
         userToSparkSession.put(userName, (sparkSession, times))
+        ThriftServerMonitor.setListener(userName, new MultiTenancyThriftServerListener(conf))
+
+        sparkSession.sparkContext.addSparkListener(ThriftServerMonitor.getListener(userName))
+        val uiTab = new ThriftServerTab(userName, sparkSession.sparkContext)
+        ThriftServerMonitor.addUITab(sparkSession.sparkContext.sparkUser, uiTab)
         sparkSession
       } catch {
         case e: Exception =>
@@ -276,24 +284,15 @@ private[hive] class ThriftServerSessionManager private(
       new SparkHiveSessionImpl(protocol, realUser, username, password, hiveConf,
         ipAddress, withImpersonation, this, thriftServerOperationManager)
     hiveSession.open(sessionConf)
-
-    // TODO: Add listener
-//    HiveThriftServer2.listener.onSessionCreated(
-//      hiveSession.getIpAddress, sessionHandle.getSessionId.toString, hiveSession.getUsername)
-
     val sessionUGI = hiveSession.getSessionUgi
-
     val sparkSession = getSparkSession(sessionUGI, sessionConf)
-
     if (sparkSession != null && !sparkSession.sparkContext.isStopped) {
       hiveSession.setSparkSession(sparkSession)
     } else {
       userToSparkSession.remove(username)
       throw new SparkException("Initialize SparkSession Failed")
     }
-
     sparkSession.conf.set("spark.sql.hive.version", HiveUtils.hiveExecutionVersion)
-
     sessionUGI.doAs(new PrivilegedExceptionAction[Unit] {
       override def run(): Unit = {
         sparkSession.sql(getDatabase(sessionConf))
@@ -308,14 +307,21 @@ private[hive] class ThriftServerSessionManager private(
     handleToSession.put(sessionHandle, hiveSession)
     handleToSessionUser.put(sessionHandle, username)
     thriftServerOperationManager.addSparkSession(sessionHandle, sparkSession)
+
+    ThriftServerMonitor.getListener(username).onSessionCreated(
+      hiveSession.getIpAddress,
+      sessionHandle.getSessionId.toString,
+      hiveSession.getUserName)
+
     sessionHandle
   }
 
   def closeSession(sessionHandle: SessionHandle) {
-    // TODO: HiveThriftServer2.listener.onSessionClosed(sessionHandle.getSessionId.toString)
+    val sessionUser = handleToSessionUser.remove(sessionHandle)
+    ThriftServerMonitor.getListener(sessionUser)
+      .onSessionClosed(sessionHandle.getSessionId.toString)
     thriftServerOperationManager.sessionToActivePool.remove(sessionHandle)
     thriftServerOperationManager.removeSparkSession(sessionHandle)
-    val sessionUser = handleToSessionUser.remove(sessionHandle)
     val sessionAndTimes = userToSparkSession.get(sessionUser)
     if (sessionAndTimes != null) {
       sessionAndTimes._2.decrementAndGet()

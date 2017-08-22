@@ -36,13 +36,13 @@ import org.apache.hadoop.hive.shims.Utils
 import org.apache.hadoop.security.UserGroupInformation
 import org.apache.hive.common.util.HiveVersionInfo
 import org.apache.hive.service.CompositeService
-import org.apache.spark.SparkConf
 import org.apache.zookeeper._
 import org.apache.zookeeper.data.ACL
 
+import org.apache.spark.SparkConf
 import org.apache.spark.deploy.SparkHadoopUtil
 import org.apache.spark.internal.Logging
-import org.apache.spark.sql.hive.HiveUtils
+import org.apache.spark.sql.hive.thriftserver.monitor.{MultiTenancyThriftServerListener, ThriftServerMonitor}
 import org.apache.spark.util.{ShutdownHookManager, Utils => SparkUtils}
 
 private[multitenancy] class MultiTenancyThriftServer private (name: String)
@@ -272,7 +272,6 @@ object MultiTenancyThriftServer extends Logging {
       server.init(hiveConf)
       server.start()
       logInfo(server.getName + " started!")
-
       if (server.isSupportDynamicServiceDiscovery(hiveConf)) {
         logInfo(s"HA mode: start to add this ${server.getName} instance to Zookeeper...")
         server.addServerInstanceToZooKeeper(hiveConf)

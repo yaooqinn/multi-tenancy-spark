@@ -22,6 +22,7 @@ import java.security.PrivilegedExceptionAction
 import java.util
 import javax.security.auth.login.LoginException
 
+import scala.collection.mutable.LinkedHashMap
 import scala.collection.JavaConverters._
 import scala.util.control.{ControlThrowable, NonFatal}
 
@@ -44,7 +45,7 @@ private[hive] object MultiSparkSQLEnv extends Logging{
 
   val users = originConf.get(PROXY_USERS).distinct.filter(_ != globalUgi.getShortUserName)
 
-  val userToSession = new util.HashMap[String, SparkSession]()
+  val userToSession = new LinkedHashMap[String, SparkSession]()
 
   val userToQueue = new util.HashMap[String, String]()
 
@@ -98,7 +99,7 @@ private[hive] object MultiSparkSQLEnv extends Logging{
 
   /** Cleans up and shuts down all the Spark SQL environments. */
   def stop() {
-    userToSession.asScala.foreach { case ((user, sparkSession)) =>
+    userToSession.foreach { case ((user, sparkSession)) =>
       if (sparkSession != null && !sparkSession.sparkContext.isStopped) {
         logInfo(s"Shutting down Spark SQL Environment for user: [$user].")
         // Stop the SparkContext

@@ -19,7 +19,7 @@ package org.apache.spark.sql.hive.thriftserver.ui
 
 import org.apache.spark.{SparkContext, SparkException}
 import org.apache.spark.internal.Logging
-import org.apache.spark.sql.hive.thriftserver.HiveThriftServer2
+import org.apache.spark.sql.hive.thriftserver.monitor.ThriftServerMonitor
 import org.apache.spark.sql.hive.thriftserver.ui.ThriftServerTab._
 import org.apache.spark.ui.{SparkUI, SparkUITab}
 
@@ -33,8 +33,9 @@ private[thriftserver] class ThriftServerTab(userName: String, sparkContext: Spar
   override val name = "JDBC/ODBC Server"
 
   val parent = getSparkUI(sparkContext)
+
   // ThriftServerTab renders by different listener's content, identified by user.
-  val listener = HiveThriftServer2.serverListeners(userName)
+  val listener = ThriftServerMonitor.getListener(userName)
 
   attachPage(new ThriftServerPage(this))
   attachPage(new ThriftServerSessionPage(this))
