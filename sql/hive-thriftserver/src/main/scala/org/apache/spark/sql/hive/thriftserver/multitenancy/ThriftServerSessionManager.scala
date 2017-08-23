@@ -217,7 +217,7 @@ private[hive] class ThriftServerSessionManager private(
       checkRound -= 1
       if ( checkRound <= 0) {
         throw new SparkException(s"A partially constructed SparkContext for [$userName] " +
-          s"has last more than $checkRound seconds")
+          s"has last more than 15 seconds")
       }
     }
 

@@ -43,7 +43,7 @@ function usage {
   "${SPARK_HOME}"/bin/spark-submit --help 2>&1 | grep -v Usage 1>&2
   echo
   echo "Thrift server options:"
-  "${SPARK_HOME}"/bin/spark-class $CLASS --help 2>&1 | grep -v "$pattern" 1>&2
+  "${SPARK_HOME}"/bin/spark-class ${CLASS} --help 2>&1 | grep -v "$pattern" 1>&2
 }
 
 if [[ "$@" = *--help ]] || [[ "$@" = *-h ]]; then
@@ -52,5 +52,6 @@ if [[ "$@" = *--help ]] || [[ "$@" = *-h ]]; then
 fi
 
 export SUBMIT_USAGE_FUNCTION=usage
+export SPARK_MULTI_TENANCY_MODE=true
 
-exec "${SPARK_HOME}"/sbin/spark-daemon.sh submit $CLASS 1 --name "Thrift JDBC/ODBC Server" "$@"
+exec "${SPARK_HOME}"/sbin/spark-daemon.sh submit ${CLASS} 1 --name "Thrift JDBC/ODBC Server" "$@"

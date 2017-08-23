@@ -52,5 +52,6 @@ if [[ "$@" = *--help ]] || [[ "$@" = *-h ]]; then
 fi
 
 export SUBMIT_USAGE_FUNCTION=usage
+export SPARK_MULTI_TENANCY_MODE=true
 
 exec "${SPARK_HOME}"/sbin/spark-daemon.sh submit ${CLASS} 1 "$@"

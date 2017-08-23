@@ -515,13 +515,6 @@ class SparkContext(config: SparkConf, user: Option[String]) extends Logging {
     _dagScheduler = new DAGScheduler(this)
     _heartbeatReceiver.ask[Boolean](TaskSchedulerIsSet)
 
-    // SPARK-8851: In yarn-client mode, the AM still does the credentials refresh. The driver
-    // reads the credentials from HDFS, just like the executors and updates its own credentials
-    // cache.
-    if (conf.contains("spark.yarn.credentials.file")) {
-      SparkHadoopUtil.get.startCredentialUpdater(conf)
-    }
-
     // start TaskScheduler after taskScheduler sets DAGScheduler reference in DAGScheduler's
     // constructor
     _taskScheduler.start()
@@ -1800,6 +1793,7 @@ class SparkContext(config: SparkConf, user: Option[String]) extends Logging {
    * Shut down the SparkContext.
    */
   def stop(): Unit = {
+    logInfo(s"Stopping ${sparkUser}'s SparkContext")
     if (LiveListenerBus.withinListenerThread.value) {
       throw new SparkException(
         s"Cannot stop SparkContext within listener thread of ${LiveListenerBus.name}")
@@ -1867,7 +1861,10 @@ class SparkContext(config: SparkConf, user: Option[String]) extends Logging {
       SparkHadoopUtil.get.stopCredentialUpdater
     }
     // Unset YARN mode system env variable, to allow switching between cluster types.
-    System.clearProperty("SPARK_YARN_MODE")
+    val cleanable = !java.lang.Boolean.parseBoolean(
+      System.getProperty("SPARK_MULTI_TENANCY_MODE", System.getenv("SPARK_MULTI_TENANCY_MODE")))
+    if (cleanable) System.clearProperty("SPARK_YARN_MODE")
+    SparkContext.contextBeingConstructedWithUser.remove(sparkUser)
     SparkContext.clearActiveContext(_sparkUser)
     logInfo("Successfully stopped SparkContext")
   }

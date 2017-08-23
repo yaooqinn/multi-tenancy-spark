@@ -132,8 +132,10 @@ private[spark] class Client(
   def stop(): Unit = {
     launcherBackend.close()
     yarnClient.stop()
+    val cleanable = !java.lang.Boolean.parseBoolean(
+      System.getProperty("SPARK_MULTI_TENANCY_MODE", System.getenv("SPARK_MULTI_TENANCY_MODE")))
     // Unset YARN mode system env variable, to allow switching between cluster types.
-    System.clearProperty("SPARK_YARN_MODE")
+    if (cleanable) System.clearProperty("SPARK_YARN_MODE")
   }
 
   /**

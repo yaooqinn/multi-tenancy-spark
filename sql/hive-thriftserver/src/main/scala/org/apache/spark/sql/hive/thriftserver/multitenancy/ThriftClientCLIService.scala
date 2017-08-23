@@ -86,7 +86,7 @@ class ThriftClientCLIService private(name: String, cliService: ThriftServerCLISe
           s"close it now")
         Try {cliService.closeSession(sessionHandle)} match {
           case Failure(exception) =>
-            logWarning("Failed closing session" + exception, exception)
+            logWarning("Failed closing session " + exception, exception)
           case _ =>
         }
       }

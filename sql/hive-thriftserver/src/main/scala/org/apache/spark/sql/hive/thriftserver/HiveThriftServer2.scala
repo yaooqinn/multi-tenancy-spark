@@ -116,6 +116,7 @@ private[hive] class HiveThriftServer2 extends HiveServer2
       new ThriftBinaryCLIService(cliService)
     }
     addService(thriftCLIService)
+    System.setProperty("SPARK_MULTI_TENANCY_MODE", "true")
     initCompositeService(hiveConf)
   }
 

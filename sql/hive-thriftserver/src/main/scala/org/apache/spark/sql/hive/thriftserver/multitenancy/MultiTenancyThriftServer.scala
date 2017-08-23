@@ -53,7 +53,7 @@ private[multitenancy] class MultiTenancyThriftServer private (name: String)
   private[this] var clientCLIService: ThriftClientCLIService = _
 
   private var zooKeeperClient: CuratorFramework = _
-  private var znode: PersistentEphemeralNode = null
+  private var znode: PersistentEphemeralNode = _
   private var znodePath: String = _
   // Set to true only when deregistration happens
   private var deregisteredWithZooKeeper = false
@@ -69,6 +69,7 @@ private[multitenancy] class MultiTenancyThriftServer private (name: String)
     clientCLIService = new ThriftClientCLIService(cliService)
     addService(cliService)
     addService(clientCLIService)
+    System.setProperty("SPARK_MULTI_TENANCY_MODE", "true")
     super.init(hiveConf)
     ShutdownHookManager.addShutdownHook {
       () => this.stop()
@@ -183,7 +184,7 @@ private[multitenancy] class MultiTenancyThriftServer private (name: String)
           } finally {
             setDeregisteredWithZooKeeper(true)
             // If there are no more active client sessions, stop the server
-            if (cliService.getSessionManager.getOpenSessionCount == 0) {
+            if (cliService.getSessionManager().getOpenSessionCount == 0) {
               logWarning("This instance of Spark ThriftServer has been removed from the list of " +
                 "server instances available for dynamic service discovery. The last client " +
                 "session has ended - will shutdown now.")
