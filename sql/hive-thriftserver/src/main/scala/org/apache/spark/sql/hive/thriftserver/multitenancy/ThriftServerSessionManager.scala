@@ -24,6 +24,7 @@ import java.util.concurrent._
 import java.util.concurrent.atomic.AtomicInteger
 
 import scala.collection.JavaConverters._
+import scala.collection.mutable.HashSet
 
 import org.apache.commons.io.FileUtils
 import org.apache.hadoop.hive.conf.HiveConf
@@ -34,8 +35,8 @@ import org.apache.hive.service.cli.{HiveSQLException, SessionHandle}
 import org.apache.hive.service.cli.session.HiveSession
 import org.apache.hive.service.cli.thrift.TProtocolVersion
 import org.apache.hive.service.server.ThreadFactoryWithGarbageCleanup
-import org.apache.spark.{SparkConf, SparkContext, SparkException}
 
+import org.apache.spark.{SparkConf, SparkException}
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.hive.HiveUtils
@@ -55,6 +56,7 @@ private[hive] class ThriftServerSessionManager private(
   private[this] val handleToSessionUser = new ConcurrentHashMap[SessionHandle, String]
   private[this] val userToSparkSession =
     new ConcurrentHashMap[String, (SparkSession, AtomicInteger)]
+  private[this] val userSparkContextBeingConstruct = new HashSet[String]()
 
   private[this] var backgroundOperationPool: ThreadPoolExecutor = _
   private[this] var isOperationLogEnabled = false
@@ -208,12 +210,12 @@ private[hive] class ThriftServerSessionManager private(
 
   private[this] def getSparkSession(
       user: UserGroupInformation,
-      sessionConf: JMap[String, String]): SparkSession = {
+      sessionConf: JMap[String, String]): SparkSession = synchronized {
     val userName = user.getShortUserName
     // TODO: add config not hard code
-    var checkRound = 15
-    while (SparkContext.isPartiallyConstructed(userName)) {
-      sleepInterval(1000L)
+    var checkRound = 60
+    while (isPartiallyConstructed(userName)) {
+      wait(1000L)
       checkRound -= 1
       if ( checkRound <= 0) {
         throw new SparkException(s"A partially constructed SparkContext for [$userName] " +
@@ -223,35 +225,49 @@ private[hive] class ThriftServerSessionManager private(
 
     val kv = userToSparkSession.get(userName)
     if (kv == null) {
-      val conf = sparkConf.clone
-      conf.setAppName(s"SparkThriftServer[$userName]")
-      conf.set("spark.ui.port", "0") // avoid max port retry reach
-      setQueue(sessionConf, conf)
-      try {
-        val sparkSession = user.doAs(new PrivilegedExceptionAction[SparkSession] {
-          override def run(): SparkSession = {
-            SparkSession.builder()
-              .config(conf)
-              .enableHiveSupport()
-              .user(userName)
-              .getOrCreate()
-          }
-        })
-        val times = new AtomicInteger(1)
-        userToSparkSession.put(userName, (sparkSession, times))
-        ThriftServerMonitor.setListener(userName, new MultiTenancyThriftServerListener(conf))
-
-        sparkSession.sparkContext.addSparkListener(ThriftServerMonitor.getListener(userName))
-        val uiTab = new ThriftServerTab(userName, sparkSession.sparkContext)
-        ThriftServerMonitor.addUITab(sparkSession.sparkContext.sparkUser, uiTab)
-        sparkSession
-      } catch {
-        case e: Exception =>
-          throw new SparkException("Failed Init SparkSession" + e, e)
-      }
+      userSparkContextBeingConstruct.add(userName)
+      notifyAll()
+      createSparkSession(user, sessionConf)
     } else {
       logInfo(s"SparkSession for [$userName] is reused " + kv._2.incrementAndGet() + "times")
       kv._1
+    }
+  }
+
+  private[this] def isPartiallyConstructed(user: String): Boolean = {
+    userSparkContextBeingConstruct.contains(user)
+  }
+
+
+  private[this] def createSparkSession(
+      user: UserGroupInformation,
+      sessionConf: JMap[String, String]): SparkSession = {
+    val userName = user.getShortUserName
+    val conf = sparkConf.clone
+    conf.setAppName(s"SparkThriftServer[$userName]")
+    conf.set("spark.ui.port", "0") // avoid max port retry reach
+    setQueue(sessionConf, conf)
+    try {
+      val sparkSession = user.doAs(new PrivilegedExceptionAction[SparkSession] {
+        override def run(): SparkSession = {
+          SparkSession.builder()
+            .config(conf)
+            .enableHiveSupport()
+            .user(userName)
+            .getOrCreate()
+        }
+      })
+      val times = new AtomicInteger(1)
+      userToSparkSession.put(userName, (sparkSession, times))
+      userSparkContextBeingConstruct.remove(userName)
+      ThriftServerMonitor.setListener(userName, new MultiTenancyThriftServerListener(conf))
+      sparkSession.sparkContext.addSparkListener(ThriftServerMonitor.getListener(userName))
+      val uiTab = new ThriftServerTab(userName, sparkSession.sparkContext)
+      ThriftServerMonitor.addUITab(sparkSession.sparkContext.sparkUser, uiTab)
+      sparkSession
+    } catch {
+      case e: Exception =>
+        throw new SparkException("Failed Init SparkSession" + e, e)
     }
   }
 

@@ -128,6 +128,7 @@ private[spark] class CredentialUpdater(
   }
 
   def stop(): Unit = {
+    logInfo("CredentialUpdater Stopped!")
     credentialUpdater.shutdown()
   }
 

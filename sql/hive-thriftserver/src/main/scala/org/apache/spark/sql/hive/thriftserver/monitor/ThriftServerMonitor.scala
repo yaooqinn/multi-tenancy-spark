@@ -34,7 +34,7 @@ object ThriftServerMonitor extends Logging {
   }
 
   def getListener(user: String): ThriftServerListener = {
-    listeners.getOrElse(user, throw new SparkException("Listener does not init"))
+    listeners.getOrElse(user, throw new SparkException(s"Listener does not init for user[$user]"))
   }
 
   def addUITab(user: String, ui: ThriftServerTab): Unit = {

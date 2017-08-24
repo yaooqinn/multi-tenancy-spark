@@ -62,10 +62,7 @@ class SparkHiveSessionImpl(
     if (withImpersonation) {
       if (UserGroupInformation.isSecurityEnabled) {
         try {
-          val ugi = UserGroupInformation.createProxyUser(username, currentUser)
-          val creds = Option(CredentialCache.get(username)).getOrElse(new Credentials())
-          ugi.addCredentials(creds)
-          ugi
+          UserGroupInformation.createProxyUser(username, currentUser)
         } catch {
           case e: IOException =>
             throw new HiveSQLException("Couldn't setup proxy user", e)
