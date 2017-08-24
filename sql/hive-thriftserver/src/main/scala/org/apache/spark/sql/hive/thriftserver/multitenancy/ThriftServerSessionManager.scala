@@ -18,7 +18,6 @@
 package org.apache.spark.sql.hive.thriftserver.multitenancy
 
 import java.io.{File, IOException}
-import java.security.PrivilegedExceptionAction
 import java.util.{Date, Map => JMap}
 import java.util.concurrent._
 import java.util.concurrent.atomic.AtomicInteger
@@ -29,7 +28,6 @@ import scala.collection.mutable.HashSet
 import org.apache.commons.io.FileUtils
 import org.apache.hadoop.hive.conf.HiveConf
 import org.apache.hadoop.hive.conf.HiveConf.ConfVars
-import org.apache.hadoop.security.UserGroupInformation
 import org.apache.hive.service.CompositeService
 import org.apache.hive.service.cli.{HiveSQLException, SessionHandle}
 import org.apache.hive.service.cli.session.HiveSession
@@ -39,9 +37,7 @@ import org.apache.hive.service.server.ThreadFactoryWithGarbageCleanup
 import org.apache.spark.{SparkConf, SparkException}
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.SparkSession
-import org.apache.spark.sql.hive.HiveUtils
-import org.apache.spark.sql.hive.thriftserver.monitor.{MultiTenancyThriftServerListener, ThriftServerMonitor}
-import org.apache.spark.sql.hive.thriftserver.ui.ThriftServerTab
+import org.apache.spark.sql.hive.thriftserver.monitor.ThriftServerMonitor
 import org.apache.spark.util.Utils
 
 private[hive] class ThriftServerSessionManager private(
@@ -208,69 +204,6 @@ private[hive] class ThriftServerSessionManager private(
     }
   }
 
-  private[this] def getSparkSession(
-      user: UserGroupInformation,
-      sessionConf: JMap[String, String]): SparkSession = synchronized {
-    val userName = user.getShortUserName
-    // TODO: add config not hard code
-    var checkRound = 60
-    while (isPartiallyConstructed(userName)) {
-      wait(1000L)
-      checkRound -= 1
-      if ( checkRound <= 0) {
-        throw new SparkException(s"A partially constructed SparkContext for [$userName] " +
-          s"has last more than 15 seconds")
-      }
-    }
-
-    val kv = userToSparkSession.get(userName)
-    if (kv == null) {
-      userSparkContextBeingConstruct.add(userName)
-      notifyAll()
-      createSparkSession(user, sessionConf)
-    } else {
-      logInfo(s"SparkSession for [$userName] is reused " + kv._2.incrementAndGet() + "times")
-      kv._1
-    }
-  }
-
-  private[this] def isPartiallyConstructed(user: String): Boolean = {
-    userSparkContextBeingConstruct.contains(user)
-  }
-
-
-  private[this] def createSparkSession(
-      user: UserGroupInformation,
-      sessionConf: JMap[String, String]): SparkSession = {
-    val userName = user.getShortUserName
-    val conf = sparkConf.clone
-    conf.setAppName(s"SparkThriftServer[$userName]")
-    conf.set("spark.ui.port", "0") // avoid max port retry reach
-    setQueue(sessionConf, conf)
-    try {
-      val sparkSession = user.doAs(new PrivilegedExceptionAction[SparkSession] {
-        override def run(): SparkSession = {
-          SparkSession.builder()
-            .config(conf)
-            .enableHiveSupport()
-            .user(userName)
-            .getOrCreate()
-        }
-      })
-      val times = new AtomicInteger(1)
-      userToSparkSession.put(userName, (sparkSession, times))
-      userSparkContextBeingConstruct.remove(userName)
-      ThriftServerMonitor.setListener(userName, new MultiTenancyThriftServerListener(conf))
-      sparkSession.sparkContext.addSparkListener(ThriftServerMonitor.getListener(userName))
-      val uiTab = new ThriftServerTab(userName, sparkSession.sparkContext)
-      ThriftServerMonitor.addUITab(sparkSession.sparkContext.sparkUser, uiTab)
-      sparkSession
-    } catch {
-      case e: Exception =>
-        throw new SparkException("Failed Init SparkSession" + e, e)
-    }
-  }
-
   /**
    * Opens a new session and creates a session handle.
    * The username passed to this method is the effective username.
@@ -287,20 +220,9 @@ private[hive] class ThriftServerSessionManager private(
       withImpersonation: Boolean,
       delegationToken: String): SessionHandle = {
     val hiveSession =
-      new SparkHiveSessionImpl(protocol, realUser, username, password, hiveConf,
+      new SparkHiveSessionImpl(protocol, realUser, username, password, hiveConf, sparkConf.clone,
         ipAddress, withImpersonation, this, thriftServerOperationManager)
-    val sessionUGI = hiveSession.getSessionUgi
-    val sparkSession = getSparkSession(sessionUGI, sessionConf)
-    if (sparkSession != null && !sparkSession.sparkContext.isStopped) {
-      hiveSession.setSparkSession(sparkSession)
-    } else {
-      userToSparkSession.remove(username)
-      throw new SparkException("Initialize SparkSession Failed")
-    }
-
     hiveSession.open(sessionConf)
-
-    sparkSession.conf.set("spark.sql.hive.version", HiveUtils.hiveExecutionVersion)
 
     if (isOperationLogEnabled) {
       hiveSession.setOperationLogSessionDir(operationLogRootDir)
@@ -309,7 +231,7 @@ private[hive] class ThriftServerSessionManager private(
     val sessionHandle = hiveSession.getSessionHandle
     handleToSession.put(sessionHandle, hiveSession)
     handleToSessionUser.put(sessionHandle, username)
-    thriftServerOperationManager.addSparkSession(sessionHandle, sparkSession)
+    thriftServerOperationManager.addSparkSession(sessionHandle, hiveSession.sparkSession())
 
     ThriftServerMonitor.getListener(username).onSessionCreated(
       hiveSession.getIpAddress,
@@ -336,16 +258,6 @@ private[hive] class ThriftServerSessionManager private(
       throw new HiveSQLException(s"Session for [$sessionUser] does not exist!")
     }
     session.close()
-  }
-
-  private[this] def setQueue(sessionConf: JMap[String, String], conf: SparkConf): Unit = {
-    if (sessionConf != null) {
-      sessionConf.asScala.foreach { kv =>
-        if (kv._1 == "set:hiveconf:mapred.job.queue.name") {
-          sparkConf.set("spark.yarn.queue", kv._2)
-        }
-      }
-    }
   }
 
   @throws[HiveSQLException]
@@ -393,4 +305,25 @@ private[hive] class ThriftServerSessionManager private(
   def getOpenSessionCount: Int = handleToSession.size
 
   def submitBackgroundOperation(r: Runnable): Future[_] = backgroundOperationPool.submit(r)
+
+  def getExistSparkSession(user: String): (SparkSession, AtomicInteger) = {
+    userToSparkSession.get(user)
+  }
+
+  def setSparkSession(user: String, sparkSession: SparkSession): Unit = {
+    userToSparkSession.put(user, (sparkSession, new AtomicInteger(1)))
+  }
+
+  def setSCPartiallyConstructed(user: String): Unit = {
+    userSparkContextBeingConstruct.add(user)
+  }
+
+  def isSCPartiallyConstructed(user: String): Boolean = {
+    userSparkContextBeingConstruct.contains(user)
+  }
+
+  def setSCFullyConstructed(user: String): Unit = {
+    userSparkContextBeingConstruct.remove(user)
+  }
+
 }

@@ -19,7 +19,7 @@ package org.apache.spark.sql.hive.thriftserver.multitenancy
 
 import java.io.{File, IOException}
 import java.security.PrivilegedExceptionAction
-import java.util.{HashSet, List => JList, Map}
+import java.util.{HashSet, List => JList, Map => JMap}
 
 import scala.collection.JavaConverters._
 
@@ -28,16 +28,19 @@ import org.apache.hadoop.fs.FileSystem
 import org.apache.hadoop.hive.conf.HiveConf
 import org.apache.hadoop.hive.metastore.IMetaStoreClient
 import org.apache.hadoop.hive.ql.session.SessionState
-import org.apache.hadoop.security.{Credentials, UserGroupInformation}
+import org.apache.hadoop.security.UserGroupInformation
 import org.apache.hive.service.auth.HiveAuthFactory
 import org.apache.hive.service.cli._
 import org.apache.hive.service.cli.operation.{Operation, OperationManager}
 import org.apache.hive.service.cli.session.{HiveSession, SessionManager}
 import org.apache.hive.service.cli.thrift.TProtocolVersion
 
-import org.apache.spark.{CredentialCache, SparkException}
+import org.apache.spark.{SparkConf, SparkException}
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.SparkSession
+import org.apache.spark.sql.hive.HiveUtils
+import org.apache.spark.sql.hive.thriftserver.monitor.{MultiTenancyThriftServerListener, ThriftServerMonitor}
+import org.apache.spark.sql.hive.thriftserver.ui.ThriftServerTab
 
 class SparkHiveSessionImpl(
     protocol: TProtocolVersion,
@@ -45,6 +48,7 @@ class SparkHiveSessionImpl(
     var username: String,
     password: String,
     serverConf: HiveConf,
+    sparkConf: SparkConf,
     var ipAddress: String,
     withImpersonation: Boolean,
     sessionManager: ThriftServerSessionManager,
@@ -75,14 +79,68 @@ class SparkHiveSessionImpl(
     }
   }
 
-  private[this] var sparkSession: SparkSession = _
+  private[this] var _sparkSession: SparkSession = _
 
-  def setSparkSession(sparkSession: SparkSession): Unit = this.sparkSession = sparkSession
+  private[this] var initialDatabase: String = "use default"
 
-  def getSparkSession(): SparkSession = this.sparkSession
+  def sparkSession(): SparkSession = this._sparkSession
+
+  private[this] def getOrCreateSparkSession(): SparkSession = synchronized {
+    val userName = sessionUGI.getShortUserName
+    var checkRound = sparkConf.getInt("spark.yarn.report.times.on.start", 60) + 5
+    val interval = sparkConf.getTimeAsMs("spark.yarn.report.interval")
+    while (sessionManager.isSCPartiallyConstructed(userName)) {
+      wait(interval)
+      checkRound -= 1
+      if (checkRound <= 0) {
+        throw new SparkException(s"A partially constructed SparkContext for [$userName] " +
+          s"has last more than 15 seconds")
+      }
+    }
+
+    val kv = sessionManager.getExistSparkSession(userName)
+    if (kv == null) {
+      sessionManager.setSCPartiallyConstructed(userName)
+      notifyAll()
+      createSparkSession()
+    } else {
+      logInfo(s"SparkSession for [$userName] is reused " + kv._2.incrementAndGet() + "times")
+      kv._1
+    }
+  }
+
+  private[this] def createSparkSession(): SparkSession = {
+    val userName = sessionUGI.getShortUserName
+    val conf = sparkConf.clone
+    sparkConf.setAppName(s"SparkThriftServer[$userName]")
+    sparkConf.set("spark.ui.port", "0") // avoid max port retry reach
+    try {
+      _sparkSession = sessionUGI.doAs(new PrivilegedExceptionAction[SparkSession] {
+        override def run(): SparkSession = {
+          SparkSession.builder()
+            .config(conf)
+            .enableHiveSupport()
+            .user(userName)
+            .getOrCreate()
+        }
+      })
+      sessionManager.setSparkSession(userName, _sparkSession)
+      sessionManager.setSCFullyConstructed(userName)
+      ThriftServerMonitor.setListener(userName, new MultiTenancyThriftServerListener(conf))
+      _sparkSession.sparkContext.addSparkListener(ThriftServerMonitor.getListener(userName))
+      val uiTab = new ThriftServerTab(userName, _sparkSession.sparkContext)
+      ThriftServerMonitor.addUITab(_sparkSession.sparkContext.sparkUser, uiTab)
+      _sparkSession
+    } catch {
+      case e: Exception =>
+        throw new SparkException("Failed Init SparkSession" + e, e)
+    } finally {
+      sessionManager.setSCFullyConstructed(userName)
+    }
+  }
 
   def removeSparkSession(): Unit = {
-    sparkSession = null
+    _sparkSession = null
   }
 
   def getSessionUgi: UserGroupInformation = this.sessionUGI
@@ -106,7 +164,7 @@ class SparkHiveSessionImpl(
 
   @throws[HiveSQLException]
   private[this] def executeStatementInternal(
-      statement: String, confOverlay: Map[String, String], runAsync: Boolean) = {
+      statement: String, confOverlay: JMap[String, String], runAsync: Boolean) = {
     acquire(true)
     val operation =
       operationManager.newExecuteStatementOperation(this, statement, confOverlay, runAsync)
@@ -124,8 +182,16 @@ class SparkHiveSessionImpl(
     }
   }
 
-  override def open(sessionConfMap: Map[String, String]): Unit = {
+  override def open(sessionConfMap: JMap[String, String]): Unit = {
     configureSession(sessionConfMap)
+    getOrCreateSparkSession()
+
+    sessionUGI.doAs(new PrivilegedExceptionAction[Unit] {
+      override def run(): Unit = {
+        _sparkSession.sql(initialDatabase)
+      }
+    })
+    _sparkSession.conf.set("spark.sql.hive.version", HiveUtils.hiveExecutionVersion)
     lastAccessTime = System.currentTimeMillis
     lastIdleTime = lastAccessTime
   }
@@ -140,7 +206,7 @@ class SparkHiveSessionImpl(
       getInfoType match {
         case GetInfoType.CLI_SERVER_NAME => new GetInfoValue("Spark SQL")
         case GetInfoType.CLI_DBMS_NAME => new GetInfoValue("Spark SQL")
-        case GetInfoType.CLI_DBMS_VER => new GetInfoValue(getSparkSession().version)
+        case GetInfoType.CLI_DBMS_VER => new GetInfoValue(this._sparkSession.version)
         case _ =>
           throw new SparkException("Unrecognized GetInfoType value: " + getInfoType.toString)
       }
@@ -158,7 +224,7 @@ class SparkHiveSessionImpl(
    * @throws HiveSQLException
    */
   override def executeStatement(
-      statement: String, confOverlay: Map[String, String]): OperationHandle = {
+      statement: String, confOverlay: JMap[String, String]): OperationHandle = {
     executeStatementInternal(statement, confOverlay, false)
   }
 
@@ -171,7 +237,7 @@ class SparkHiveSessionImpl(
    * @throws HiveSQLException
    */
   override def executeStatementAsync(
-      statement: String, confOverlay: Map[String, String]): OperationHandle = {
+      statement: String, confOverlay: JMap[String, String]): OperationHandle = {
     executeStatementInternal(statement, confOverlay, true)
   }
 
@@ -431,21 +497,22 @@ class SparkHiveSessionImpl(
 
   override def getUserName: String = username
 
-  private[this] def configureSession(sessionConfMap: Map[String, String]): Unit = {
-    assert(sparkSession != null)
+  private[this] def configureSession(sessionConfMap: JMap[String, String]): Unit = {
     for (entry <- sessionConfMap.entrySet.asScala) {
       val key = entry.getKey
-      if (key.startsWith("set:")) {
-        sparkSession.conf.set(key.substring(4), entry.getValue)
-      }
-      else if (key.startsWith("use:")) {
-        sessionUGI.doAs(new PrivilegedExceptionAction[Unit] {
-          override def run(): Unit = {
-            sparkSession.sql("use " + entry.getValue)
-          }
-        })
-      }
-      else {
+      if (key == "set:hivevar:mapred.job.queue.name") {
+        sparkConf.set("spark.yarn.queue", entry.getValue)
+      } else if (key.startsWith("set:hivevar:")) {
+        val realKey = key.substring(12)
+        if (realKey.startsWith("spark.")) {
+          sparkConf.set(realKey, entry.getValue)
+        } else {
+          sparkConf.set("spark.hadoop." + realKey, entry.getValue)
+        }
+      } else if (key.startsWith("use:")) {
+        // deal with database later after sparkSession initialized
+        initialDatabase = "use " + entry.getValue
+      } else {
         hiveConf.verifyAndSet(key, entry.getValue)
       }
     }
