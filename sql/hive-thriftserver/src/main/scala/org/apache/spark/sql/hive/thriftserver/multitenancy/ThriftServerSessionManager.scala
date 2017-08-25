@@ -306,8 +306,8 @@ private[hive] class ThriftServerSessionManager private(
 
   def submitBackgroundOperation(r: Runnable): Future[_] = backgroundOperationPool.submit(r)
 
-  def getExistSparkSession(user: String): (SparkSession, AtomicInteger) = {
-    userToSparkSession.get(user)
+  def getExistSparkSession(user: String): Option[(SparkSession, AtomicInteger)] = {
+    Some(userToSparkSession.get(user))
   }
 
   def setSparkSession(user: String, sparkSession: SparkSession): Unit = {

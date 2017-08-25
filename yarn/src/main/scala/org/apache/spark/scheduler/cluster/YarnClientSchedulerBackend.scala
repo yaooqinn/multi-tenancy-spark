@@ -91,6 +91,7 @@ private[spark] class YarnClientSchedulerBackend(
         "It might have been killed or unable to launch application master.")
     }
     if (state == YarnApplicationState.ACCEPTED) {
+      client.stop()
       sc.stop()
       throw new SparkException("Yarn application has stayed at ACCEPTED status for a quite long" +
         " time. ResourceManager might be busy or your queue might have no more resources")

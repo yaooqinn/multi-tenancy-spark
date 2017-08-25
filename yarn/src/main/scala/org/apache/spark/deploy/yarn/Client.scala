@@ -1137,6 +1137,7 @@ private[spark] class Client(
         if (times <= 0 && state == YarnApplicationState.ACCEPTED) {
           logError(s"Time out for application $appId turn Accept to Running")
           cleanupStagingDir(appId)
+          yarnClient.killApplication(appId)
           return (state, report.getFinalApplicationStatus)
         }
       }

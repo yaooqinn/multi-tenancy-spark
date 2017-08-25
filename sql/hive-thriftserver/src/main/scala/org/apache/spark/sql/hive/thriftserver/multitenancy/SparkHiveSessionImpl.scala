@@ -88,7 +88,7 @@ class SparkHiveSessionImpl(
   private[this] def getOrCreateSparkSession(): SparkSession = synchronized {
     val userName = sessionUGI.getShortUserName
     var checkRound = sparkConf.getInt("spark.yarn.report.times.on.start", 60) + 5
-    val interval = sparkConf.getTimeAsMs("spark.yarn.report.interval")
+    val interval = sparkConf.getTimeAsMs("spark.yarn.report.interval", "1s")
     while (sessionManager.isSCPartiallyConstructed(userName)) {
       wait(interval)
       checkRound -= 1
@@ -98,27 +98,26 @@ class SparkHiveSessionImpl(
       }
     }
 
-    val kv = sessionManager.getExistSparkSession(userName)
-    if (kv == null) {
-      sessionManager.setSCPartiallyConstructed(userName)
-      notifyAll()
-      createSparkSession()
-    } else {
-      logInfo(s"SparkSession for [$userName] is reused " + kv._2.incrementAndGet() + "times")
-      kv._1
+    sessionManager.getExistSparkSession(userName) match {
+      case Some((ss, times)) =>
+        logInfo(s"SparkSession for [$userName] is reused " + times.incrementAndGet() + "times")
+        ss.newSession()
+      case _ =>
+        sessionManager.setSCPartiallyConstructed(userName)
+        notifyAll()
+        createSparkSession()
     }
   }
 
   private[this] def createSparkSession(): SparkSession = {
     val userName = sessionUGI.getShortUserName
-    val conf = sparkConf.clone
     sparkConf.setAppName(s"SparkThriftServer[$userName]")
     sparkConf.set("spark.ui.port", "0") // avoid max port retry reach
     try {
       _sparkSession = sessionUGI.doAs(new PrivilegedExceptionAction[SparkSession] {
         override def run(): SparkSession = {
           SparkSession.builder()
-            .config(conf)
+            .config(sparkConf)
             .enableHiveSupport()
             .user(userName)
             .getOrCreate()
@@ -126,7 +125,7 @@ class SparkHiveSessionImpl(
       })
       sessionManager.setSparkSession(userName, _sparkSession)
       sessionManager.setSCFullyConstructed(userName)
-      ThriftServerMonitor.setListener(userName, new MultiTenancyThriftServerListener(conf))
+      ThriftServerMonitor.setListener(userName, new MultiTenancyThriftServerListener(sparkConf))
       _sparkSession.sparkContext.addSparkListener(ThriftServerMonitor.getListener(userName))
       val uiTab = new ThriftServerTab(userName, _sparkSession.sparkContext)
       ThriftServerMonitor.addUITab(_sparkSession.sparkContext.sparkUser, uiTab)
