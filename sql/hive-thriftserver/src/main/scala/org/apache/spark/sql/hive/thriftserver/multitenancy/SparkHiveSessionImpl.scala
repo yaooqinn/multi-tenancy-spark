@@ -85,7 +85,7 @@ class SparkHiveSessionImpl(
 
   def sparkSession(): SparkSession = this._sparkSession
 
-  private[this] def getOrCreateSparkSession(): SparkSession = synchronized {
+  private[this] def getOrCreateSparkSession(): Unit = synchronized {
     val userName = sessionUGI.getShortUserName
     var checkRound = sparkConf.getInt("spark.yarn.report.times.on.start", 60) + 5
     val interval = sparkConf.getTimeAsMs("spark.yarn.report.interval", "1s")
@@ -101,7 +101,7 @@ class SparkHiveSessionImpl(
     sessionManager.getExistSparkSession(userName) match {
       case Some((ss, times)) =>
         logInfo(s"SparkSession for [$userName] is reused " + times.incrementAndGet() + "times")
-        ss.newSession()
+        _sparkSession = ss.newSession()
       case _ =>
         sessionManager.setSCPartiallyConstructed(userName)
         notifyAll()
@@ -109,7 +109,7 @@ class SparkHiveSessionImpl(
     }
   }
 
-  private[this] def createSparkSession(): SparkSession = {
+  private[this] def createSparkSession(): Unit = {
     val userName = sessionUGI.getShortUserName
     sparkConf.setAppName(s"SparkThriftServer[$userName]")
     sparkConf.set("spark.ui.port", "0") // avoid max port retry reach
@@ -129,10 +129,9 @@ class SparkHiveSessionImpl(
       _sparkSession.sparkContext.addSparkListener(ThriftServerMonitor.getListener(userName))
       val uiTab = new ThriftServerTab(userName, _sparkSession.sparkContext)
       ThriftServerMonitor.addUITab(_sparkSession.sparkContext.sparkUser, uiTab)
-      _sparkSession
     } catch {
       case e: Exception =>
-        throw new SparkException("Failed Init SparkSession" + e, e)
+        throw new SparkException(s"Failed Init SparkSession for user[$userName]" + e, e)
     } finally {
       sessionManager.setSCFullyConstructed(userName)
     }
@@ -184,6 +183,7 @@ class SparkHiveSessionImpl(
   override def open(sessionConfMap: JMap[String, String]): Unit = {
     configureSession(sessionConfMap)
     getOrCreateSparkSession()
+    assert(_sparkSession != null)
 
     sessionUGI.doAs(new PrivilegedExceptionAction[Unit] {
       override def run(): Unit = {
