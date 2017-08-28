@@ -20,7 +20,7 @@ package org.apache.spark.deploy.yarn
 import java.io.{File, IOException}
 import java.lang.reflect.InvocationTargetException
 import java.net.{Socket, URI, URL}
-import java.util.concurrent.{TimeUnit, TimeoutException}
+import java.util.concurrent.{TimeoutException, TimeUnit}
 
 import scala.collection.mutable.HashMap
 import scala.concurrent.Promise
@@ -41,8 +41,8 @@ import org.apache.spark.deploy.yarn.security.{AMCredentialRenewer, ConfigurableC
 import org.apache.spark.internal.Logging
 import org.apache.spark.internal.config._
 import org.apache.spark.rpc._
-import org.apache.spark.scheduler.cluster.CoarseGrainedClusterMessages._
 import org.apache.spark.scheduler.cluster.{CoarseGrainedSchedulerBackend, YarnSchedulerBackend}
+import org.apache.spark.scheduler.cluster.CoarseGrainedClusterMessages._
 import org.apache.spark.util._
 
 /**
