@@ -18,7 +18,7 @@
 #
 
 #
-# Shell script for starting the Spark SQL Thrift server
+# Shell script for starting the Spark SQL Multi-tenancy Supported Thrift server
 
 # Enter posix mode for bash
 set -o posix
@@ -29,10 +29,10 @@ fi
 
 # NOTE: This exact class name is matched downstream by SparkSubmit.
 # Any changes need to be reflected there.
-CLASS="org.apache.spark.sql.hive.thriftserver.HiveThriftServer2"
+CLASS="org.apache.spark.sql.hive.thriftserver.multitenancy.MultiTenancyThriftServer"
 
 function usage {
-  echo "Usage: ./sbin/start-thriftserver [options] [thrift server options]"
+  echo "Usage: ./sbin/start-multitenancy-server.sh [options] [thrift server options]"
   pattern="usage"
   pattern+="\|Spark assembly has been built with Hive"
   pattern+="\|NOTE: SPARK_PREPEND_CLASSES is set"
@@ -54,4 +54,4 @@ fi
 export SUBMIT_USAGE_FUNCTION=usage
 export SPARK_MULTI_TENANCY_MODE=true
 
-exec "${SPARK_HOME}"/sbin/spark-daemon.sh submit ${CLASS} 1 --name "Thrift JDBC/ODBC Server" "$@"
+exec "${SPARK_HOME}"/sbin/spark-daemon.sh submit ${CLASS} 1 "$@"

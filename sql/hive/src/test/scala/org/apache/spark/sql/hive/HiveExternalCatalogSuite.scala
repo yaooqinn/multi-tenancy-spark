@@ -18,21 +18,24 @@
 package org.apache.spark.sql.hive
 
 import org.apache.hadoop.conf.Configuration
-
 import org.apache.spark.SparkConf
+
 import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.catalog._
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.execution.command.DDLUtils
 import org.apache.spark.sql.types.StructType
+import org.apache.spark.util.Utils
 
 /**
  * Test suite for the [[HiveExternalCatalog]].
  */
 class HiveExternalCatalogSuite extends ExternalCatalogSuite {
 
+  private val user = Utils.getCurrentUserName()
+
   private val externalCatalog: HiveExternalCatalog = {
-    val catalog = new HiveExternalCatalog(new SparkConf, new Configuration)
+    val catalog = new HiveExternalCatalog(new SparkConf, new Configuration, user)
     catalog.client.reset()
     catalog
   }

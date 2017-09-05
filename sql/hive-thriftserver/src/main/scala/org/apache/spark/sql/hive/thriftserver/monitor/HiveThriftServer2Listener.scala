@@ -15,18 +15,23 @@
  * limitations under the License.
  */
 
-package org.apache.spark.sql.hive
+package org.apache.spark.sql.hive.thriftserver.monitor
 
-import org.apache.spark.internal.config.ConfigBuilder
+import org.apache.hive.service.server.HiveServer2
 
-package object config {
-  
-  private[hive] val PROXY_USERS =
-    ConfigBuilder("spark.sql.proxy.users")
-      .doc(s"Comma separated string of user names for Spark Thrift Server to initializing " +
-        s"different SparkContext. These users must have rights to impersonate the real user" +
-        s"who start the driver side jvm.")
-      .stringConf
-      .toSequence
-      .createWithDefault(Nil)
+import org.apache.spark.SparkConf
+import org.apache.spark.scheduler.SparkListenerApplicationEnd
+import org.apache.spark.sql.hive.thriftserver.MultiSparkSQLEnv
+
+/**
+ * An inner sparkListener called in sc.stop to clean up the HiveThriftServer2
+ */
+private[thriftserver] class HiveThriftServer2Listener(
+    val server: HiveServer2,
+    override val conf: SparkConf) extends ThriftServerListener {
+
+  override def onApplicationEnd(applicationEnd: SparkListenerApplicationEnd): Unit = {
+    MultiSparkSQLEnv.userToSession.remove(applicationEnd.sparkUser)
+    if (MultiSparkSQLEnv.userToSession.isEmpty) server.stop()
+  }
 }

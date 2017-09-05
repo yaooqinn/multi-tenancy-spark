@@ -15,18 +15,21 @@
  * limitations under the License.
  */
 
-package org.apache.spark.sql.hive
+package org.apache.spark.sql.hive.thriftserver.monitor
 
-import org.apache.spark.internal.config.ConfigBuilder
 
-package object config {
-  
-  private[hive] val PROXY_USERS =
-    ConfigBuilder("spark.sql.proxy.users")
-      .doc(s"Comma separated string of user names for Spark Thrift Server to initializing " +
-        s"different SparkContext. These users must have rights to impersonate the real user" +
-        s"who start the driver side jvm.")
-      .stringConf
-      .toSequence
-      .createWithDefault(Nil)
+private[thriftserver] class SessionInfo(
+    val sessionId: String,
+    val startTimestamp: Long,
+    val ip: String,
+    val userName: String) {
+  var finishTimestamp: Long = 0L
+  var totalExecution: Int = 0
+  def totalTime: Long = {
+    if (finishTimestamp == 0L) {
+      System.currentTimeMillis - startTimestamp
+    } else {
+      finishTimestamp - startTimestamp
+    }
+  }
 }

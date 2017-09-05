@@ -24,20 +24,20 @@ import java.util.{Arrays, Locale, Properties, ServiceLoader, UUID}
 import java.util.concurrent.{ConcurrentHashMap, ConcurrentMap}
 import java.util.concurrent.atomic.{AtomicBoolean, AtomicInteger}
 
-import scala.collection.JavaConverters._
 import scala.collection.Map
+import scala.collection.JavaConverters._
 import scala.collection.generic.Growable
 import scala.collection.mutable.HashMap
 import scala.language.implicitConversions
-import scala.reflect.{ClassTag, classTag}
+import scala.reflect.{classTag, ClassTag}
 import scala.util.control.NonFatal
 
 import com.google.common.collect.MapMaker
 import org.apache.commons.lang3.SerializationUtils
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.{FileSystem, Path}
-import org.apache.hadoop.io.{ArrayWritable, BooleanWritable, BytesWritable, DoubleWritable, FloatWritable, IntWritable, LongWritable, NullWritable, Text, Writable}
-import org.apache.hadoop.mapred.{FileInputFormat, InputFormat, JobConf, SequenceFileInputFormat, TextInputFormat}
+import org.apache.hadoop.io._
+import org.apache.hadoop.mapred.{Utils => _, _}
 import org.apache.hadoop.mapreduce.{InputFormat => NewInputFormat, Job => NewHadoopJob}
 import org.apache.hadoop.mapreduce.lib.input.{FileInputFormat => NewFileInputFormat}
 
@@ -514,13 +514,6 @@ class SparkContext(config: SparkConf, user: Option[String]) extends Logging {
     _taskScheduler = ts
     _dagScheduler = new DAGScheduler(this)
     _heartbeatReceiver.ask[Boolean](TaskSchedulerIsSet)
-
-    // SPARK-8851: In yarn-client mode, the AM still does the credentials refresh. The driver
-    // reads the credentials from HDFS, just like the executors and updates its own credentials
-    // cache.
-    if (conf.contains("spark.yarn.credentials.file")) {
-      SparkHadoopUtil.get.startCredentialUpdater(conf)
-    }
 
     // start TaskScheduler after taskScheduler sets DAGScheduler reference in DAGScheduler's
     // constructor
@@ -1800,6 +1793,7 @@ class SparkContext(config: SparkConf, user: Option[String]) extends Logging {
    * Shut down the SparkContext.
    */
   def stop(): Unit = {
+    logInfo(s"Stopping ${sparkUser}'s SparkContext")
     if (LiveListenerBus.withinListenerThread.value) {
       throw new SparkException(
         s"Cannot stop SparkContext within listener thread of ${LiveListenerBus.name}")
@@ -1867,7 +1861,10 @@ class SparkContext(config: SparkConf, user: Option[String]) extends Logging {
       SparkHadoopUtil.get.stopCredentialUpdater
     }
     // Unset YARN mode system env variable, to allow switching between cluster types.
-    System.clearProperty("SPARK_YARN_MODE")
+    val cleanable = !java.lang.Boolean.parseBoolean(
+      System.getProperty("SPARK_MULTI_TENANCY_MODE", System.getenv("SPARK_MULTI_TENANCY_MODE")))
+    if (cleanable) System.clearProperty("SPARK_YARN_MODE")
+    SparkContext.contextBeingConstructedWithUser.remove(sparkUser)
     SparkContext.clearActiveContext(_sparkUser)
     logInfo("Successfully stopped SparkContext")
   }
@@ -2219,11 +2216,6 @@ class SparkContext(config: SparkConf, user: Option[String]) extends Logging {
 
     listenerBus.start()
     _listenerBusStarted = true
-  }
-
-  /** Trigger the application start event in many tenant mode. */
-  def triggerApplicationStart(): Unit = {
-    postApplicationStart()
   }
 
   /** Post the application start event */

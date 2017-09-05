@@ -38,6 +38,7 @@ import org.apache.spark.internal.Logging
 import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.hive.{HiveExternalCatalog, HiveUtils}
 import org.apache.spark.sql.hive.client.HiveClient
+import org.apache.spark.sql.hive.thriftserver.monitor.ThriftServerMonitor
 import org.apache.spark.sql.hive.thriftserver.server.SparkSQLOperationManager
 
 
@@ -107,11 +108,16 @@ private[hive] class SparkSQLSessionManager(hiveServer: HiveServer2)
     hiveSession.setSessionManager(this)
     hiveSession.setOperationManager(sparkSqlOperationManager)
 
-    if (isOperationLogEnabled) hiveSession.setOperationLogSessionDir(operationLogRootDir)
+    if (isOperationLogEnabled) {
+      hiveSession.setOperationLogSessionDir(operationLogRootDir)
+    }
 
     val sessionHandle = hiveSession.getSessionHandle
     handleToSession.put(sessionHandle, hiveSession)
     handleToProxyUser.put(sessionHandle, sessionUGI)
+
+    ThriftServerMonitor.getListener(username).onSessionCreated(
+      hiveSession.getIpAddress, sessionHandle.getSessionId.toString, hiveSession.getUsername)
 
     val (rangerUser, _, database) = configureSession(sessionConf)
 
@@ -138,32 +144,18 @@ private[hive] class SparkSQLSessionManager(hiveServer: HiveServer2)
         sparkSession.sql(database.get)
       }
     })
-
-    val listeners = ArrayBuffer[AbstractHiveThriftServer2Listener]()
-    listeners += HiveThriftServer2.serverListeners(hiveSession.getUserName)
-
     sparkSqlOperationManager.sessionToSparkSession.put(sessionHandle, sparkSession)
     sparkSqlOperationManager.sessionToClient.put(sessionHandle, client)
-  
-    listeners.foreach(listener =>
-      listener.onSessionCreated(
-      hiveSession.getIpAddress, sessionHandle.getSessionId.toString,
-      hiveSession.getUsername, username, rangerUser.getOrElse("")))
-    
     sessionHandle
   }
 
   override def closeSession(sessionHandle: SessionHandle) {
-    val session = super.getSession(sessionHandle)
-    val listeners = ArrayBuffer[AbstractHiveThriftServer2Listener]()
-    listeners += HiveThriftServer2.serverListeners(session.getUserName)
-    listeners.foreach(listener =>
-      listener.onSessionClosed(sessionHandle.getSessionId.toString))
-    
+    val user = handleToProxyUser.remove(sessionHandle)
+    ThriftServerMonitor.getListener(user.getShortUserName)
+      .onSessionClosed(sessionHandle.getSessionId.toString)
     super.closeSession(sessionHandle)
     sparkSqlOperationManager.sessionToActivePool.remove(sessionHandle)
 
-    val user = handleToProxyUser.remove(sessionHandle)
     val credentials = CredentialCache.get(user.getShortUserName)
     if (credentials != null) {
       logInfo(s"Adding Fresh Credentials For User:[${user.getShortUserName}]")
@@ -210,12 +202,12 @@ private[hive] class SparkSQLSessionManager(hiveServer: HiveServer2)
         s"no resource is prepared for it. Please change to an available user or add [$user] to " +
         s"the `spark.sql.proxy.users` on the server side." )
     }
-    if (!MultiSparkSQLEnv.userToSession.containsKey(user)) {
+    if (!MultiSparkSQLEnv.userToSession.keySet.contains(user)) {
       throw new SparkException(s"SparkContext for User [$user] is not initialized please restart" +
         s" the server.")
     } else {
-      MultiSparkSQLEnv.userToSession.get(user) match {
-        case ss: SparkSession if (!ss.sparkContext.isStopped) =>
+      MultiSparkSQLEnv.userToSession(user) match {
+        case ss: SparkSession if !ss.sparkContext.isStopped =>
           ss.newSession()
         case _ =>
           throw new SparkException(s"SparkContext stopped for User [$user]")

@@ -30,8 +30,10 @@ import javax.security.sasl.AuthenticationException;
 import javax.security.sasl.AuthorizeCallback;
 import javax.security.sasl.SaslException;
 
+import org.apache.hive.service.AbstractService;
 import org.apache.hive.service.auth.AuthenticationProviderFactory.AuthMethods;
 import org.apache.hive.service.auth.PlainSaslServer.SaslPlainProvider;
+import org.apache.hive.service.cli.thrift.TCLIService;
 import org.apache.hive.service.cli.thrift.TCLIService.Iface;
 import org.apache.hive.service.cli.thrift.ThriftCLIService;
 import org.apache.thrift.TProcessor;
@@ -41,9 +43,15 @@ import org.apache.thrift.transport.TSaslServerTransport;
 import org.apache.thrift.transport.TTransport;
 import org.apache.thrift.transport.TTransportFactory;
 
+import org.apache.spark.sql.hive.thriftserver.multitenancy.ThriftClientCLIService;
+
 public final class PlainSaslHelper {
 
   public static TProcessorFactory getPlainProcessorFactory(ThriftCLIService service) {
+    return new SQLPlainProcessorFactory(service);
+  }
+
+  public static TProcessorFactory getPlainProcessorFactory(ThriftClientCLIService service) {
     return new SQLPlainProcessorFactory(service);
   }
 
@@ -138,9 +146,9 @@ public final class PlainSaslHelper {
 
   private static final class SQLPlainProcessorFactory extends TProcessorFactory {
 
-    private final ThriftCLIService service;
+    private final TCLIService.Iface service;
 
-    SQLPlainProcessorFactory(ThriftCLIService service) {
+    SQLPlainProcessorFactory(TCLIService.Iface service) {
       super(null);
       this.service = service;
     }
@@ -150,5 +158,6 @@ public final class PlainSaslHelper {
       return new TSetIpAddressProcessor<Iface>(service);
     }
   }
+
 
 }

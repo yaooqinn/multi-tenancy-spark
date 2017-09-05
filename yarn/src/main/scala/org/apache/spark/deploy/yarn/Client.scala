@@ -132,8 +132,10 @@ private[spark] class Client(
   def stop(): Unit = {
     launcherBackend.close()
     yarnClient.stop()
+    val cleanable = !java.lang.Boolean.parseBoolean(
+      System.getProperty("SPARK_MULTI_TENANCY_MODE", System.getenv("SPARK_MULTI_TENANCY_MODE")))
     // Unset YARN mode system env variable, to allow switching between cluster types.
-    System.clearProperty("SPARK_YARN_MODE")
+    if (cleanable) System.clearProperty("SPARK_YARN_MODE")
   }
 
   /**
@@ -1058,12 +1060,15 @@ private[spark] class Client(
    * @param appId ID of the application to monitor.
    * @param returnOnRunning Whether to also return the application state when it is RUNNING.
    * @param logApplicationReport Whether to log details of the application report every iteration.
+   * @param isCalledFromStart true called from start thread, otherwise from monitor thread.
    * @return A pair of the yarn application state and the final application state.
    */
   def monitorApplication(
       appId: ApplicationId,
       returnOnRunning: Boolean = false,
-      logApplicationReport: Boolean = true): (YarnApplicationState, FinalApplicationStatus) = {
+      logApplicationReport: Boolean = true,
+      isCalledFromStart: Boolean = false): (YarnApplicationState, FinalApplicationStatus) = {
+    var times = sparkConf.get(REPORT_TIMES_ON_START)
     val interval = sparkConf.get(REPORT_INTERVAL)
     var lastState: YarnApplicationState = null
     while (true) {
@@ -1125,6 +1130,16 @@ private[spark] class Client(
 
       if (returnOnRunning && state == YarnApplicationState.RUNNING) {
         return (state, report.getFinalApplicationStatus)
+      }
+
+      if (isCalledFromStart) {
+        times -= 1
+        if (times <= 0 && state == YarnApplicationState.ACCEPTED) {
+          logError(s"Time out for application $appId turn Accept to Running")
+          cleanupStagingDir(appId)
+          yarnClient.killApplication(appId)
+          return (state, report.getFinalApplicationStatus)
+        }
       }
 
       lastState = state

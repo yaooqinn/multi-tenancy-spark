@@ -27,7 +27,7 @@ import scala.collection.mutable.ArrayBuffer
 import scala.util.control.NonFatal
 
 import org.apache.hadoop.hive.metastore.api.FieldSchema
-import org.apache.hadoop.hive.shims.Utils
+import org.apache.hadoop.hive.ql.session.OperationLog
 import org.apache.hive.service.cli._
 import org.apache.hive.service.cli.operation.ExecuteStatementOperation
 import org.apache.hive.service.cli.session.HiveSession
@@ -38,6 +38,8 @@ import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.execution.command.SetCommand
 import org.apache.spark.sql.hive.HiveUtils
 import org.apache.spark.sql.hive.client.HiveClient
+import org.apache.spark.sql.hive.thriftserver.monitor.ThriftServerMonitor
+import org.apache.spark.sql.hive.thriftserver.multitenancy.SparkHiveSessionImpl
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 import org.apache.spark.util.{Utils => SparkUtils}
@@ -154,13 +156,14 @@ private[hive] class SparkExecuteStatementOperation(
     if (!runInBackground) {
       execute()
     } else {
-      val sparkServiceUGI = Utils.getUGI
+      val sparkServiceUGI = parentSession.getSessionUgi
 
       // Runnable impl to call runInternal asynchronously,
       // from a different thread
       val backgroundOperation = new Runnable() {
         override def run(): Unit = {
           val doAsAction = new PrivilegedExceptionAction[Unit]() {
+            registerCurrentOperationLog()
             override def run(): Unit = {
               try {
                 execute()
@@ -168,6 +171,8 @@ private[hive] class SparkExecuteStatementOperation(
                 case e: HiveSQLException =>
                   setOperationException(e)
                   logError("Error running hive query: ", e)
+              } finally {
+                unregisterOperationLog()
               }
             }
           }
@@ -177,14 +182,19 @@ private[hive] class SparkExecuteStatementOperation(
             case e: Exception =>
               setOperationException(new HiveSQLException(e))
               logError("Error running hive query as user : " +
-                sparkServiceUGI.getShortUserName(), e)
+                sparkServiceUGI.getShortUserName, e)
           }
         }
       }
       try {
         // This submit blocks if no background threads are available to run this operation
-        val backgroundHandle =
-          parentSession.getSessionManager().submitBackgroundOperation(backgroundOperation)
+        val backgroundHandle = parentSession match {
+          case s: SparkHiveSessionImpl =>
+            s.getThriftServerSessionManager.submitBackgroundOperation(backgroundOperation)
+          case h: HiveSession =>
+            h.getSessionManager.submitBackgroundOperation(backgroundOperation)
+        }
+
         setBackgroundHandle(backgroundHandle)
       } catch {
         case rejected: RejectedExecutionException =>
@@ -206,20 +216,12 @@ private[hive] class SparkExecuteStatementOperation(
     // Always use the latest class loader provided by executionHive's state.
     val executionHiveClassLoader = sparkSession.sharedState.jarClassLoader
     Thread.currentThread().setContextClassLoader(executionHiveClassLoader)
-    
-    // For multi-tenant mode, we need identify different user/session, so
-    // we can display in different webUI, or we may be confused in the webUI.
-    val listeners = ArrayBuffer[AbstractHiveThriftServer2Listener]()
-    listeners += HiveThriftServer2.serverListeners(parentSession.getUserName)
-  
-    listeners.foreach(listener =>
-      listener.onStatementStart(
-        statementId,
-        parentSession.getSessionHandle.getSessionId.toString,
-        statement,
-        statementId,
-        parentSession.getUsername))
-    
+    ThriftServerMonitor.getListener(parentSession.getUserName).onStatementStart(
+      statementId,
+      parentSession.getSessionHandle.getSessionId.toString,
+      statement,
+      statementId,
+      parentSession.getUsername)
     sparkSession.sparkContext.setJobGroup(statementId, statement)
     val pool = sessionToActivePool.get(parentSession.getSessionHandle)
     if (pool != null) {
@@ -235,14 +237,13 @@ private[hive] class SparkExecuteStatementOperation(
           logInfo(s"Setting spark.scheduler.pool=$value for future statements in this session.")
         case _ =>
       }
-      // To avoid result too long, only record physical plan string.
-      listeners.foreach( listener =>
-        listener.onStatementParsed(statementId, result.queryExecution.simpleString))
+      ThriftServerMonitor.getListener(parentSession.getUserName)
+        .onStatementParsed(statementId, result.queryExecution.toString())
       iter = {
         val useIncrementalCollect =
           sparkSession.conf.get("spark.sql.thriftServer.incrementalCollect", "false").toBoolean
         if (useIncrementalCollect) {
-          result.toLocalIterator.asScala
+          result.toLocalIterator().asScala
         } else {
           result.collect().iterator
         }
@@ -253,10 +254,9 @@ private[hive] class SparkExecuteStatementOperation(
       dataTypes = result.queryExecution.analyzed.output.map(_.dataType).toArray
     } catch {
       case e: HiveSQLException =>
-        listeners.foreach(listener =>
-          listener.onStatementError(
-            statementId, e.getMessage, SparkUtils.exceptionString(e)))
-        if (getStatus().getState() == OperationState.CANCELED) {
+        ThriftServerMonitor.getListener(parentSession.getUserName).onStatementError(
+          statementId, e.getMessage, SparkUtils.exceptionString(e))
+        if (getStatus.getState == OperationState.CANCELED) {
           return
         } else {
           setState(OperationState.ERROR)
@@ -267,9 +267,8 @@ private[hive] class SparkExecuteStatementOperation(
       case e: Throwable =>
         val currentState = getStatus.getState
         logError(s"Error executing query, currentState $currentState, ", e)
-        listeners.foreach(listener =>
-          listener.onStatementError(
-            statementId, e.getMessage, SparkUtils.exceptionString(e)))
+        ThriftServerMonitor.getListener(parentSession.getUserName).onStatementError(
+          statementId, e.getMessage, SparkUtils.exceptionString(e))
         if (statementId != null) {
           sparkSession.sparkContext.cancelJobGroup(statementId)
         }
@@ -282,8 +281,7 @@ private[hive] class SparkExecuteStatementOperation(
         }
         throw new HiveSQLException(e.toString)
     }
-    listeners.foreach(listener =>
-      listener.onStatementFinish(statementId))
+    ThriftServerMonitor.getListener(parentSession.getUserName).onStatementFinish(statementId)
     getStatus.getState match {
       case OperationState.CANCELED =>
       case OperationState.FINISHED =>
@@ -305,12 +303,43 @@ private[hive] class SparkExecuteStatementOperation(
   private def cleanup(state: OperationState) {
     setState(state)
     if (runInBackground) {
-      val backgroundHandle = getBackgroundHandle()
+      val backgroundHandle = getBackgroundHandle
       if (backgroundHandle != null) {
         backgroundHandle.cancel(true)
       }
     }
   }
+
+  private def registerCurrentOperationLog(): Unit = {
+    if (isOperationLogEnabled) {
+      if (operationLog == null) {
+        logWarning("Failed to get current OperationLog object of Operation: "
+          + getHandle.getHandleIdentifier)
+        isOperationLogEnabled = false
+      } else {
+        parentSession match {
+          case spark: SparkHiveSessionImpl =>
+            spark.getThriftServerSessionManager.getOperationManager
+              .setOperationLog(spark.getUserName, operationLog)
+          case _ =>
+            OperationLog.setCurrentOperationLog(operationLog)
+        }
+      }
+    }
+  }
+
+  override def unregisterOperationLog(): Unit = {
+    if (isOperationLogEnabled) {
+      parentSession match {
+        case spark: SparkHiveSessionImpl =>
+          spark.getThriftServerSessionManager.getOperationManager
+            .unregisterOperationLog(parentSession.getUserName)
+        case _ =>
+          OperationLog.removeCurrentOperationLog()
+      }
+    }
+  }
+
 }
 
 object SparkExecuteStatementOperation {

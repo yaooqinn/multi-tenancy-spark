@@ -87,10 +87,11 @@ private[sql] class SharedState(val sparkContext: SparkContext) extends Logging {
    * A catalog that interacts with external systems.
    */
   val externalCatalog: ExternalCatalog =
-    SharedState.reflect[ExternalCatalog, SparkConf, Configuration](
+    SharedState.reflect[ExternalCatalog, SparkConf, Configuration, String](
       SharedState.externalCatalogClassName(sparkContext.conf),
       sparkContext.conf,
-      sparkContext.hadoopConfiguration)
+      sparkContext.hadoopConfiguration,
+      sparkContext.sparkUser)
 
   // Create the default database if it doesn't exist.
   {
@@ -161,18 +162,21 @@ object SharedState extends Logging {
 
   /**
    * Helper method to create an instance of [[T]] using a single-arg constructor that
-   * accepts an [[Arg1]] and an [[Arg2]].
+   * accepts an [[Arg1]] and an [[Arg2]] and and [[Arg3]].
    */
-  private def reflect[T, Arg1 <: AnyRef, Arg2 <: AnyRef](
+  private def reflect[T, Arg1 <: AnyRef, Arg2 <: AnyRef, Arg3 <: AnyRef](
       className: String,
       ctorArg1: Arg1,
-      ctorArg2: Arg2)(
+      ctorArg2: Arg2,
+      ctorArg3: Arg3)(
       implicit ctorArgTag1: ClassTag[Arg1],
-      ctorArgTag2: ClassTag[Arg2]): T = {
+      ctorArgTag2: ClassTag[Arg2],
+      ctorArgTag3: ClassTag[Arg3]): T = {
     try {
       val clazz = Utils.classForName(className)
-      val ctor = clazz.getDeclaredConstructor(ctorArgTag1.runtimeClass, ctorArgTag2.runtimeClass)
-      val args = Array[AnyRef](ctorArg1, ctorArg2)
+      val ctor = clazz.getDeclaredConstructor(
+        ctorArgTag1.runtimeClass, ctorArgTag2.runtimeClass, ctorArgTag3.runtimeClass)
+      val args = Array[AnyRef](ctorArg1, ctorArg2, ctorArg3)
       ctor.newInstance(args: _*).asInstanceOf[T]
     } catch {
       case NonFatal(e) =>

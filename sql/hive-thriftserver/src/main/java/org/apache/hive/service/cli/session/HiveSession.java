@@ -18,10 +18,14 @@
 
 package org.apache.hive.service.cli.session;
 
+import java.io.IOException;
 import java.util.List;
 import java.util.Map;
 
+import javax.security.auth.login.LoginException;
+
 import org.apache.hadoop.hive.metastore.IMetaStoreClient;
+import org.apache.hadoop.security.UserGroupInformation;
 import org.apache.hive.service.auth.HiveAuthFactory;
 import org.apache.hive.service.cli.*;
 
@@ -153,4 +157,6 @@ public interface HiveSession extends HiveSessionBase {
   void closeExpiredOperations();
 
   long getNoOperationTime();
+
+  UserGroupInformation getSessionUgi() throws LoginException, IOException;
 }

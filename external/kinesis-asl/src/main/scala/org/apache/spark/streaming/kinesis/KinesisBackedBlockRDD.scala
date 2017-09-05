@@ -30,7 +30,7 @@ import org.apache.spark._
 import org.apache.spark.internal.Logging
 import org.apache.spark.rdd.{BlockRDD, BlockRDDPartition}
 import org.apache.spark.storage.BlockId
-import org.apache.spark.util.NextIterator
+import org.apache.spark.util.{NextIterator, Utils}
 
 
 /** Class representing a range of Kinesis sequence numbers. Both sequence numbers are inclusive. */
@@ -95,7 +95,8 @@ class KinesisBackedBlockRDD[T: ClassTag](
   }
 
   override def compute(split: Partition, context: TaskContext): Iterator[T] = {
-    val blockManager = SparkEnv.get.blockManager
+    val user = Utils.getCurrentUserName()
+    val blockManager = SparkEnv.get(user).blockManager
     val partition = split.asInstanceOf[KinesisBackedBlockRDDPartition]
     val blockId = partition.blockId
 

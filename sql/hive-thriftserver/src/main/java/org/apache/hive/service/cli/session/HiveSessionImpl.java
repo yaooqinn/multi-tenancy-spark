@@ -24,6 +24,8 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 
+import javax.security.auth.login.LoginException;
+
 import org.apache.commons.io.FileUtils;
 import org.apache.commons.lang3.StringUtils;
 import org.apache.commons.logging.Log;
@@ -42,6 +44,8 @@ import org.apache.hadoop.hive.ql.metadata.HiveException;
 import org.apache.hadoop.hive.ql.processors.SetProcessor;
 import org.apache.hadoop.hive.ql.session.SessionState;
 import org.apache.hadoop.hive.shims.ShimLoader;
+import org.apache.hadoop.hive.shims.Utils;
+import org.apache.hadoop.security.UserGroupInformation;
 import org.apache.hive.common.util.HiveVersionInfo;
 import org.apache.hive.service.auth.HiveAuthFactory;
 import org.apache.hive.service.cli.*;
@@ -588,6 +592,11 @@ public class HiveSessionImpl implements HiveSession {
   @Override
   public long getNoOperationTime() {
     return lastIdleTime > 0 ? System.currentTimeMillis() - lastIdleTime : 0;
+  }
+
+  @Override
+  public UserGroupInformation getSessionUgi() throws LoginException, IOException {
+    return Utils.getUGI();
   }
 
   private void closeTimedOutOperations(List<Operation> operations) {

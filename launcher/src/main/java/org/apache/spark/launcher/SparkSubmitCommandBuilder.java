@@ -86,6 +86,9 @@ class SparkSubmitCommandBuilder extends AbstractCommandBuilder {
       SparkLauncher.NO_RESOURCE);
     specialClasses.put("org.apache.spark.sql.hive.thriftserver.HiveThriftServer2",
       SparkLauncher.NO_RESOURCE);
+    specialClasses.put(
+      "org.apache.spark.sql.hive.thriftserver.multitenancy.MultiTenancyThriftServer",
+      SparkLauncher.NO_RESOURCE);
   }
 
   final List<String> sparkArgs;
