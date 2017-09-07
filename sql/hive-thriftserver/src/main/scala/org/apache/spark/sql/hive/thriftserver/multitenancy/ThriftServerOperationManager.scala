@@ -18,10 +18,11 @@
 package org.apache.spark.sql.hive.thriftserver.multitenancy
 
 import java.sql.SQLException
-import java.util.{HashMap => JMap, List => JList}
+import java.util.{ArrayList, HashMap => JMap, List => JList}
 import java.util.concurrent.ConcurrentHashMap
 
 import scala.collection.JavaConverters._
+import scala.collection.mutable.ArrayBuffer
 
 import org.apache.hadoop.hive.conf.HiveConf
 import org.apache.hadoop.hive.metastore.api.{FieldSchema, Schema}
@@ -187,7 +188,7 @@ private[multitenancy] class ThriftServerOperationManager private(name: String)
       throw new HiveSQLException("Couldn't find log associated with operation handle: " + opHandle)
     }
     // read logs
-    var logs: JList[String] = null
+    var logs: JList[String] = new ArrayList[String]()
     try
       logs = operationLog.readOperationLog(isFetchFirst(orientation), maxRows)
     catch {
@@ -217,15 +218,15 @@ private[multitenancy] class ThriftServerOperationManager private(name: String)
     schema
   }
 
-  def removeExpiredOperations(handles: Array[OperationHandle]): JList[Operation] = {
-    val removed: JList[Operation] = null
+  def removeExpiredOperations(handles: Array[OperationHandle]): Array[Operation] = {
+    val removed = new ArrayBuffer[Operation]()
     for (handle <- handles) {
       val operation: Operation = removeTimedOutOperation(handle)
       if (operation != null) {
         logWarning("Operation " + handle + " is timed-out and will be closed")
-        removed.add(operation)
+        removed += operation
       }
     }
-    removed
+    removed.toArray
   }
 }
