@@ -19,9 +19,10 @@ package org.apache.spark.sql.hive.thriftserver.multitenancy
 
 import java.io.{File, IOException}
 import java.security.PrivilegedExceptionAction
-import java.util.{HashSet, List => JList, Map => JMap}
+import java.util.{List => JList, Map => JMap}
 
 import scala.collection.JavaConverters._
+import scala.collection.mutable.HashSet
 
 import org.apache.commons.io.FileUtils
 import org.apache.hadoop.fs.FileSystem
@@ -287,7 +288,7 @@ class SparkHiveSessionImpl(
     acquire(true)
     try {
       // Iterate through the opHandles and close their operations
-      for (opHandle <- opHandleSet.asScala) {
+      for (opHandle <- opHandleSet) {
         operationManager.closeOperation(opHandle)
       }
       opHandleSet.clear()
@@ -374,7 +375,7 @@ class SparkHiveSessionImpl(
   }
 
   override def closeExpiredOperations(): Unit = {
-    val handles = opHandleSet.asScala.toArray
+    val handles = opHandleSet.toArray
     if (handles.length > 0) {
       val operations = operationManager.removeExpiredOperations(handles)
       if (!operations.isEmpty) {
@@ -383,10 +384,10 @@ class SparkHiveSessionImpl(
     }
   }
 
-  private[this] def closeTimedOutOperations(operations: JList[Operation]): Unit = {
+  private[this] def closeTimedOutOperations(operations: Array[Operation]): Unit = {
     acquire(false)
     try {
-      for (operation <- operations.asScala) {
+      for (operation <- operations) {
         opHandleSet.remove(operation.getHandle)
         try
           operation.close()
