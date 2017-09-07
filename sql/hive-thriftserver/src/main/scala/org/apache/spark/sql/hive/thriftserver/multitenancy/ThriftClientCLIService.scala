@@ -288,7 +288,7 @@ class ThriftClientCLIService private(name: String, cliService: ThriftServerCLISe
       cliService.closeSession(sessionHandle)
       resp.setStatus(OK_STATUS)
       val context = currentServerContext.get
-        .asInstanceOf[ThriftClientCLIService#ThriftClientCLIServerContext]
+        .asInstanceOf[ThriftClientCLIServerContext]
       if (context != null) {
         context.setSessionHandle(null)
       }
