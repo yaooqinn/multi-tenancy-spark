@@ -72,9 +72,9 @@ private[hive] class SparkExecuteStatementOperation(
 
   def close(): Unit = {
     // RDDs will be cleaned automatically upon garbage collection.
-    sparkSession.sparkContext.clearJobGroup()
     logDebug(s"CLOSING $statementId")
     cleanup(OperationState.CLOSED)
+    sparkSession.sparkContext.clearJobGroup()
   }
 
   def addNonNullColumnValue(from: SparkRow, to: ArrayBuffer[Any], ordinal: Int) {
@@ -230,6 +230,8 @@ private[hive] class SparkExecuteStatementOperation(
     try {
       client.authorize(statement)
       result = Dataset.ofRows(sparkSession, plan)
+      ThriftServerMonitor.getListener(parentSession.getUserName)
+        .onStatementParsed(statementId, result.queryExecution.toString())
       logDebug(result.queryExecution.toString())
       result.queryExecution.logical match {
         case SetCommand(Some((SQLConf.THRIFTSERVER_POOL.key, Some(value)))) =>
@@ -237,11 +239,8 @@ private[hive] class SparkExecuteStatementOperation(
           logInfo(s"Setting spark.scheduler.pool=$value for future statements in this session.")
         case _ =>
       }
-      ThriftServerMonitor.getListener(parentSession.getUserName)
-        .onStatementParsed(statementId, result.queryExecution.toString())
       iter = {
-        val useIncrementalCollect =
-          sparkSession.conf.get("spark.sql.thriftServer.incrementalCollect", "false").toBoolean
+        val useIncrementalCollect = sparkSession.conf.get(SQLConf.THRIFTSERVER_INCREMENTAL_COLLECT)
         if (useIncrementalCollect) {
           result.toLocalIterator().asScala
         } else {
@@ -254,12 +253,13 @@ private[hive] class SparkExecuteStatementOperation(
       dataTypes = result.queryExecution.analyzed.output.map(_.dataType).toArray
     } catch {
       case e: HiveSQLException =>
-        ThriftServerMonitor.getListener(parentSession.getUserName).onStatementError(
-          statementId, e.getMessage, SparkUtils.exceptionString(e))
-        if (getStatus.getState == OperationState.CANCELED) {
+        if (getStatus.getState == OperationState.CANCELED
+          || getStatus.getState == OperationState.CLOSED) {
           return
         } else {
           setState(OperationState.ERROR)
+          ThriftServerMonitor.getListener(parentSession.getUserName).onStatementError(
+            statementId, e.getMessage, SparkUtils.exceptionString(e))
           throw e
         }
       // Actually do need to catch Throwable as some failures don't inherit from Exception and
@@ -267,46 +267,41 @@ private[hive] class SparkExecuteStatementOperation(
       case e: Throwable =>
         val currentState = getStatus.getState
         logError(s"Error executing query, currentState $currentState, ", e)
-        ThriftServerMonitor.getListener(parentSession.getUserName).onStatementError(
-          statementId, e.getMessage, SparkUtils.exceptionString(e))
-        if (statementId != null) {
-          sparkSession.sparkContext.cancelJobGroup(statementId)
+        if (currentState == OperationState.CANCELED
+          || currentState == OperationState.CLOSED) {
+          return
+        } else {
+          setState(OperationState.ERROR)
+          ThriftServerMonitor.getListener(parentSession.getUserName).onStatementError(
+            statementId, e.getMessage, SparkUtils.exceptionString(e))
+          throw new HiveSQLException(e.toString)
         }
-        getStatus.getState match {
-          case OperationState.CANCELED =>
-          case OperationState.FINISHED =>
-          case OperationState.CLOSED =>
-          case OperationState.INITIALIZED => setState(OperationState.CLOSED)
-          case _ => setState(OperationState.ERROR)
-        }
-        throw new HiveSQLException(e.toString)
+    } finally {
+      if (statementId != null) {
+        sparkSession.sparkContext.cancelJobGroup(statementId)
+      }
     }
+    setState(OperationState.FINISHED)
     ThriftServerMonitor.getListener(parentSession.getUserName).onStatementFinish(statementId)
-    getStatus.getState match {
-      case OperationState.CANCELED =>
-      case OperationState.FINISHED =>
-      case OperationState.CLOSED =>
-      case OperationState.ERROR =>
-      case OperationState.INITIALIZED => setState(OperationState.CLOSED)
-      case _ => setState(OperationState.FINISHED)
-    }
   }
 
   override def cancel(): Unit = {
     logInfo(s"Cancel '$statement' with $statementId")
-    if (statementId != null) {
-      sparkSession.sparkContext.cancelJobGroup(statementId)
-    }
     cleanup(OperationState.CANCELED)
   }
 
   private def cleanup(state: OperationState) {
-    setState(state)
+    if (getStatus.getState != OperationState.CLOSED) {
+      setState(state)
+    }
     if (runInBackground) {
       val backgroundHandle = getBackgroundHandle
       if (backgroundHandle != null) {
         backgroundHandle.cancel(true)
       }
+    }
+    if (statementId != null) {
+      sparkSession.sparkContext.cancelJobGroup(statementId)
     }
   }
 
@@ -346,7 +341,7 @@ object SparkExecuteStatementOperation {
   def getTableSchema(structType: StructType): TableSchema = {
     val schema = structType.map { field =>
       val attrTypeString = if (field.dataType == NullType) "void" else field.dataType.catalogString
-      new FieldSchema(field.name, attrTypeString, "")
+      new FieldSchema(field.name, attrTypeString, field.getComment().getOrElse(""))
     }
     new TableSchema(schema.asJava)
   }
