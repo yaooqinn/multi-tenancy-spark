@@ -209,6 +209,7 @@ private[spark] object JsonProtocol {
 
   def applicationEndToJson(applicationEnd: SparkListenerApplicationEnd): JValue = {
     ("Event" -> Utils.getFormattedClassName(applicationEnd)) ~
+    ("User" -> applicationEnd.sparkUser) ~
     ("Timestamp" -> applicationEnd.time)
   }
 
@@ -621,7 +622,9 @@ private[spark] object JsonProtocol {
   }
 
   def applicationEndFromJson(json: JValue): SparkListenerApplicationEnd = {
-    SparkListenerApplicationEnd((json \ "Timestamp").extract[Long], (json \ "User").extract[String])
+    val time = (json \ "Timestamp").extract[Long]
+    val sparkUser = (json \ "User").extract[String]
+    SparkListenerApplicationEnd(time, sparkUser)
   }
 
   def executorAddedFromJson(json: JValue): SparkListenerExecutorAdded = {

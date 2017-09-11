@@ -45,6 +45,7 @@ private[spark] class ApplicationEventListener extends SparkListener {
 
   override def onApplicationEnd(applicationEnd: SparkListenerApplicationEnd) {
     endTime = Some(applicationEnd.time)
+    sparkUser = Some(applicationEnd.sparkUser)
   }
 
   override def onEnvironmentUpdate(environmentUpdate: SparkListenerEnvironmentUpdate) {
