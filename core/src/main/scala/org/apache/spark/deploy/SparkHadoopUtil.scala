@@ -355,12 +355,12 @@ class SparkHadoopUtil extends Logging {
    * Start a thread to periodically update the current user's credentials with new credentials so
    * that access to secured service does not fail.
    */
-  private[spark] def startCredentialUpdater(conf: SparkConf) {}
+  private[spark] def startCredentialUpdater(conf: SparkConf, user: String) {}
 
   /**
    * Stop the thread that does the credential updates.
    */
-  private[spark] def stopCredentialUpdater() {}
+  private[spark] def stopCredentialUpdater(user: String) {}
 
   /**
    * Return a fresh Hadoop configuration, bypassing the HDFS cache mechanism.

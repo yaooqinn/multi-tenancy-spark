@@ -189,6 +189,7 @@ private[spark] object CoarseGrainedExecutorBackend extends Logging {
       // Debug code
       Utils.checkHost(hostname)
 
+      val user = Utils.getCurrentUserName()
       // Bootstrap to fetch the driver's Spark properties.
       val executorConf = new SparkConf
       val port = executorConf.getInt("spark.executor.port", 0)
@@ -217,7 +218,7 @@ private[spark] object CoarseGrainedExecutorBackend extends Logging {
       if (driverConf.contains("spark.yarn.credentials.file")) {
         logInfo("Will periodically update credentials from: " +
           driverConf.get("spark.yarn.credentials.file"))
-        SparkHadoopUtil.get.startCredentialUpdater(driverConf)
+        SparkHadoopUtil.get.startCredentialUpdater(driverConf, user)
       }
 
       val env = SparkEnv.createExecutorEnv(
@@ -229,7 +230,7 @@ private[spark] object CoarseGrainedExecutorBackend extends Logging {
         env.rpcEnv.setupEndpoint("WorkerWatcher", new WorkerWatcher(env.rpcEnv, url))
       }
       env.rpcEnv.awaitTermination()
-      SparkHadoopUtil.get.stopCredentialUpdater()
+      SparkHadoopUtil.get.stopCredentialUpdater(user)
     }
   }
 
