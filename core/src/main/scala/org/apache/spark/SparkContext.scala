@@ -1858,7 +1858,7 @@ class SparkContext(config: SparkConf, user: Option[String]) extends Logging {
     }
 
     Utils.tryLogNonFatalError {
-      SparkHadoopUtil.get.stopCredentialUpdater
+      SparkHadoopUtil.get.stopCredentialUpdater(sparkUser)
     }
     // Unset YARN mode system env variable, to allow switching between cluster types.
     val cleanable = !java.lang.Boolean.parseBoolean(

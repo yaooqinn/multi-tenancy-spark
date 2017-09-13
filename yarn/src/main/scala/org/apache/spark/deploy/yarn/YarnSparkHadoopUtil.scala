@@ -46,7 +46,7 @@ import org.apache.spark.util.Utils
  */
 class YarnSparkHadoopUtil extends SparkHadoopUtil {
 
-  private var credentialUpdater: CredentialUpdater = _
+  private val userToCredentialUpdater = new HashMap[String, CredentialUpdater]
 
   override def transferCredentials(source: UserGroupInformation, dest: UserGroupInformation) {
     dest.addCredentials(source.getCredentials())
@@ -87,16 +87,16 @@ class YarnSparkHadoopUtil extends SparkHadoopUtil {
     if (credentials != null) credentials.getSecretKey(new Text(key)) else null
   }
 
-  private[spark] override def startCredentialUpdater(sparkConf: SparkConf): Unit = {
-    credentialUpdater =
+  private[spark] override def startCredentialUpdater(sparkConf: SparkConf, user: String): Unit = {
+    val credentialUpdater =
       new ConfigurableCredentialManager(sparkConf, newConfiguration(sparkConf)).credentialUpdater()
+    userToCredentialUpdater(user) = credentialUpdater
     credentialUpdater.start()
   }
 
-  private[spark] override def stopCredentialUpdater(): Unit = {
-    if (credentialUpdater != null) {
+  private[spark] override def stopCredentialUpdater(user: String): Unit = {
+    userToCredentialUpdater.remove(user).foreach { credentialUpdater =>
       credentialUpdater.stop()
-      credentialUpdater = null
     }
   }
 

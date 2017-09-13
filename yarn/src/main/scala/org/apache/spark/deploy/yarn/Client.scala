@@ -18,16 +18,16 @@
 package org.apache.spark.deploy.yarn
 
 import java.io.{File, FileOutputStream, IOException, OutputStreamWriter}
-import java.net.{InetAddress, URI, UnknownHostException}
+import java.net.{InetAddress, UnknownHostException, URI}
 import java.nio.ByteBuffer
 import java.nio.charset.StandardCharsets
-import java.util.zip.{ZipEntry, ZipOutputStream}
 import java.util.{Properties, UUID}
+import java.util.zip.{ZipEntry, ZipOutputStream}
 
 import scala.collection.JavaConverters._
 import scala.collection.mutable.{ArrayBuffer, HashMap, HashSet, ListBuffer, Map}
-import scala.util.control.NonFatal
 import scala.util.{Failure, Success, Try}
+import scala.util.control.NonFatal
 
 import com.google.common.base.Objects
 import com.google.common.io.Files
@@ -38,8 +38,8 @@ import org.apache.hadoop.io.DataOutputBuffer
 import org.apache.hadoop.mapreduce.MRJobConfig
 import org.apache.hadoop.security.{Credentials, UserGroupInformation}
 import org.apache.hadoop.util.StringUtils
-import org.apache.hadoop.yarn.api.ApplicationConstants.Environment
 import org.apache.hadoop.yarn.api._
+import org.apache.hadoop.yarn.api.ApplicationConstants.Environment
 import org.apache.hadoop.yarn.api.protocolrecords._
 import org.apache.hadoop.yarn.api.records._
 import org.apache.hadoop.yarn.client.api.{YarnClient, YarnClientApplication}
@@ -47,6 +47,7 @@ import org.apache.hadoop.yarn.conf.YarnConfiguration
 import org.apache.hadoop.yarn.exceptions.ApplicationNotFoundException
 import org.apache.hadoop.yarn.util.Records
 
+import org.apache.spark.{CredentialCache, SecurityManager, SparkConf, SparkException}
 import org.apache.spark.deploy.SparkHadoopUtil
 import org.apache.spark.deploy.yarn.config._
 import org.apache.spark.deploy.yarn.security.ConfigurableCredentialManager
@@ -54,7 +55,6 @@ import org.apache.spark.internal.Logging
 import org.apache.spark.internal.config._
 import org.apache.spark.launcher.{LauncherBackend, SparkAppHandle, YarnCommandBuilderUtils}
 import org.apache.spark.util.{CallerContext, Utils}
-import org.apache.spark.{CredentialCache, SecurityManager, SparkConf, SparkException}
 
 private[spark] class Client(
     val args: ClientArguments,
@@ -123,7 +123,8 @@ private[spark] class Client(
   private val appStagingBaseDir = sparkConf.get(STAGING_DIR).map { new Path(_) }
     .getOrElse(FileSystem.get(hadoopConf).getHomeDirectory())
 
-  private val credentialManager = ConfigurableCredentialManager.getOrCreate(sparkConf)
+  private lazy val credentialManager =
+    ConfigurableCredentialManager.getOrCreate(sparkConf, sparkUser.get)
 
   def reportLauncherState(state: SparkAppHandle.State): Unit = {
     launcherBackend.setState(state)
@@ -1177,8 +1178,8 @@ private[spark] class Client(
    * If the application finishes with a failed, killed, or undefined status,
    * throw an appropriate SparkException.
    */
-  def run(): Unit = {
-    this.appId = submitApplication()
+  def run(user: String): Unit = {
+    this.appId = submitApplication(Some(user))
     if (!launcherBackend.isConnected() && fireAndForget) {
       val report = getApplicationReport(appId)
       val state = report.getYarnApplicationState
@@ -1237,7 +1238,7 @@ private object Client extends Logging {
     sparkConf.remove("spark.jars")
     sparkConf.remove("spark.files")
     val args = new ClientArguments(argStrings)
-    new Client(args, sparkConf).run()
+    new Client(args, sparkConf).run(Utils.getCurrentUserName())
   }
 
   // Alias for the user jar

@@ -20,6 +20,7 @@ package org.apache.spark.deploy.yarn.security
 import java.util.ServiceLoader
 
 import scala.collection.JavaConverters._
+import scala.collection.mutable.HashMap
 
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.security.Credentials
@@ -106,16 +107,15 @@ private[yarn] final class ConfigurableCredentialManager(
 }
 
 private[yarn] object ConfigurableCredentialManager {
-  var credentialManager: Option[ConfigurableCredentialManager] = None
+  val userToCredentialManager = new HashMap[String, ConfigurableCredentialManager]
 
   def apply(sparkConf: SparkConf): ConfigurableCredentialManager = {
     val hadoopConf = SparkHadoopUtil.get.newConfiguration(sparkConf)
     val ccm = new ConfigurableCredentialManager(sparkConf, hadoopConf)
-    credentialManager = Some(ccm)
     ccm
   }
 
-  def getOrCreate(sparkConf: SparkConf): ConfigurableCredentialManager = {
-    credentialManager.getOrElse(ConfigurableCredentialManager(sparkConf))
+  def getOrCreate(sparkConf: SparkConf, user: String): ConfigurableCredentialManager = {
+    userToCredentialManager.getOrElseUpdate(user, ConfigurableCredentialManager(sparkConf))
   }
 }
