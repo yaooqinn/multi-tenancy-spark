@@ -124,7 +124,7 @@ private[spark] class Client(
     .getOrElse(FileSystem.get(hadoopConf).getHomeDirectory())
 
   private lazy val credentialManager =
-    ConfigurableCredentialManager.getOrCreate(sparkConf, sparkUser.get)
+    ConfigurableCredentialManager.getOrCreate(sparkConf)
 
   def reportLauncherState(state: SparkAppHandle.State): Unit = {
     launcherBackend.setState(state)
