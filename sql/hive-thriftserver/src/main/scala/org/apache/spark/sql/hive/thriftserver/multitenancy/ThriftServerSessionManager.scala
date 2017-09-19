@@ -155,19 +155,21 @@ private[hive] class ThriftServerSessionManager private(
               val handle: SessionHandle = session.getSessionHandle
               logWarning("Session " + handle + " is Timed-out (last access : "
                 + new Date(session.getLastAccessTime) + ") and will be closed")
-              try
+              try {
                 closeSession(handle)
+              }
               catch {
                 case e: HiveSQLException =>
                   logWarning("Exception is thrown closing session " + handle, e)
               }
             }
-            else session.closeExpiredOperations()
+            else {
+              session.closeExpiredOperations()
+            }
           }
           sleepInterval(interval)
         }
       }
-
     }
     backgroundOperationPool.execute(timeoutChecker)
   }
@@ -188,7 +190,7 @@ private[hive] class ThriftServerSessionManager private(
               }
             case _ =>
           }
-
+          sleepInterval(interval)
         }
       }
     }
