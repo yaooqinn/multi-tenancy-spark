@@ -17,57 +17,84 @@
   -->
 
 <configuration>
+    <!-- ====== Hive MetaStore Database ===== -->
 
-    <!-- Hive MetaStore -->
     <property>
-        <name>javax.jdo.option.ConnectionDriverName</name>
-        <value>com.mysql.jdbc.Driver</value>
-        <description>MySQL JDBC driver class</description>
+      <name>javax.jdo.option.ConnectionURL</name>
+      <value>jdbcURL</value>
+      <description>JDBC connection string for the data store which contains metadata. Such as: jdbc:mysql://10.172.121.127:3306/hive_cluster3?characterEncoding=utf-8&amp;useSSL=false</description>
     </property>
 
     <property>
-        <name>javax.jdo.option.ConnectionURL</name>
-        <value>jdbcURL</value>
-        <description>
-            metadata is stored in a MySQL server
-            such as:
-            jdbc:mysql://10.172.121.127:3306/hive_cluster3?characterEncoding=utf-8&amp;useSSL=false
-        </description>
+      <name>javax.jdo.option.ConnectionDriverName</name>
+      <value>com.mysql.jdbc.Driver</value>
+      <description>JDBC Driver class name for the data store which contains metadata</description>
     </property>
 
     <property>
-        <name>javax.jdo.option.ConnectionUserName</name>
-        <value>connUser</value>
-        <description>user name for connecting to mysql server</description>
+      <name>javax.jdo.option.ConnectionUserName</name>
+      <value>connUser</value>
+      <description>user name for connecting to MySQL server</description>
     </property>
 
     <property>
-        <name>javax.jdo.option.ConnectionPassword</name>
-        <value>connPassword</value>
-        <description>password for connecting to mysql server</description>
+      <name>javax.jdo.option.ConnectionPassword</name>
+      <value>connPassword</value>
+      <description>password for connecting to mysql server</description>
+    </property>
+
+    <!-- ===== Hive MetaStore Database ===== -->
+
+
+    <!-- ===== Hive MetaStore Server ===== -->
+
+    <property>
+      <name>hive.metastore.uris</name>
+      <value>thrift://hadoop979.hz.163.org:9083,thrift://hadoop986.hz.163.org:9083</value>
+      <description>Hive connects to one of these URIs to make metadata requests to a remote Metastore (comma separated list of URIs)</description>
     </property>
 
     <property>
-        <name>hive.security.metastore.authorization.manager</name>
-        <value>org.apache.hadoop.hive.ql.security.authorization.StorageBasedAuthorizationProvider</value>
-        <description>
-            authorization manager class name to be used in the metastore for authorization.
-            The user defined authorization class should implement interface
-            org.apache.hadoop.hive.ql.security.authorization.HiveMetastoreAuthorizationProvider.
-        </description>
+      <name>hive.metastore.sasl.enabled</name>
+      <value>true</value>
+      <description>If true, the metastore thrift interface will be secured with SASL. Clients must authenticate with Kerberos.</description>
     </property>
 
     <property>
-        <name>hive.security.metastore.authenticator.manager</name>
-        <value>org.apache.hadoop.hive.ql.security.HadoopDefaultMetastoreAuthenticator</value>
-        <description>
-            authenticator manager class name to be used in the metastore for authentication.
-            The user defined authenticator should implement interface
-            org.apache.hadoop.hive.ql.security.HiveAuthenticationProvider.
-        </description>
+      <name>hive.metastore.kerberos.principal</name>
+      <value>hive/_HOST@TEST.MAMMUT.NETEASE.COM</value>
+      <description>The service principal for the metastore thrift server. The special string _HOST will be replaced automatically with the correct host name.</description>
     </property>
 
-    <!-- Impersonate -->
+    <property>
+      <name>hive.metastore.kerberos.keytab.file</name>
+      <value>/home/hzyaoqin/hive.service.keytab</value>
+      <description>The path to the Kerberos Keytab file containing the metastore thrift server's service principal.</description>
+    </property>
+
+    <!-- ===== Hive MetaStore Server ===== -->
+
+    <property>
+      <name>hive.security.metastore.authorization.manager</name>
+      <value>org.apache.hadoop.hive.ql.security.authorization.StorageBasedAuthorizationProvider</value>
+      <description>
+          authorization manager class name to be used in the metastore for authorization.
+          The user defined authorization class should implement interface
+          org.apache.hadoop.hive.ql.security.authorization.HiveMetastoreAuthorizationProvider.
+      </description>
+    </property>
+
+    <property>
+      <name>hive.security.metastore.authenticator.manager</name>
+      <value>org.apache.hadoop.hive.ql.security.HadoopDefaultMetastoreAuthenticator</value>
+      <description>
+          authenticator manager class name to be used in the metastore for authentication.
+          The user defined authenticator should implement interface
+          org.apache.hadoop.hive.ql.security.HiveAuthenticationProvider.
+      </description>
+    </property>
+
+    <!-- Impersonation-->
     <property>
         <name>hadoop.proxyuser.hive.hosts</name>
         <value>*</value>
@@ -94,7 +121,7 @@
         <value>*</value>
     </property>
 
-    <!-- Hive Server2-->
+    <!-- Hive Server2 -->
     <property>
         <name>hive.server2.enable.doAs</name>
         <value>true</value>
