@@ -125,14 +125,13 @@ class SparkHiveSessionImpl(
         }
       })
       sessionManager.setSparkSession(userName, _sparkSession)
-      sessionManager.setSCFullyConstructed(userName)
       ThriftServerMonitor.setListener(userName, new MultiTenancyThriftServerListener(sparkConf))
       _sparkSession.sparkContext.addSparkListener(ThriftServerMonitor.getListener(userName))
       val uiTab = new ThriftServerTab(userName, _sparkSession.sparkContext)
       ThriftServerMonitor.addUITab(_sparkSession.sparkContext.sparkUser, uiTab)
     } catch {
       case e: Exception =>
-        throw new SparkException(s"Failed Init SparkSession for user[$userName]" + e, e)
+        throw new SparkException(s"Failed Init SparkSession for user[$userName]", e)
     } finally {
       sessionManager.setSCFullyConstructed(userName)
     }
@@ -313,7 +312,7 @@ class SparkHiveSessionImpl(
         FileUtils.forceDelete(sessionLogDir)
       } catch {
         case e: Exception =>
-          logError("Failed to cleanup session log dir: " + sessionHandle, e)
+          logError("Failed to cleanup session log dir: " + sessionLogDir, e)
       }
     }
   }

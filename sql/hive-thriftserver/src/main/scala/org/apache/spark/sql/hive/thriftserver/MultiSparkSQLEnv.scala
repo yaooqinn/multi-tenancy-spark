@@ -61,7 +61,7 @@ private[hive] object MultiSparkSQLEnv extends Logging{
       val proxyUser = SparkHadoopUtil.get.createProxyUser(user, globalUgi)
 
       val userConf = originConf.clone
-      userConf.set("spark.uit.port", "0")
+      userConf.set("spark.ui.port", "0")
       userConf.set("spark.yarn.queue", userToQueue.get(user))
       userConf.set("spark.app.name", userConf.get("spark.app.name") + " to " + user)
 
