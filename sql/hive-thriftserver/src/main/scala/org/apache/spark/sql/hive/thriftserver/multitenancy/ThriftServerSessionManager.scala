@@ -116,19 +116,27 @@ private[hive] class ThriftServerSessionManager private(
         + operationLogRootDir.getAbsolutePath)
       isOperationLogEnabled = false
     }
-    if (!operationLogRootDir.exists) if (!operationLogRootDir.mkdirs) {
-      logWarning("Unable to create operation log root directory: "
-        + operationLogRootDir.getAbsolutePath)
-      isOperationLogEnabled = false
+    if (!operationLogRootDir.exists) {
+      if (!operationLogRootDir.mkdirs) {
+        logWarning("Unable to create operation log root directory: "
+          + operationLogRootDir.getAbsolutePath)
+        isOperationLogEnabled = false
+      }
     }
+
     if (isOperationLogEnabled) {
-      logInfo("Operation log root directory is created: " + operationLogRootDir.getAbsolutePath)
-      try
-        FileUtils.forceDeleteOnExit(operationLogRootDir)
-      catch {
-        case e: IOException =>
-          logWarning("Failed to schedule cleanup HS2 operation logging root dir: "
-            + operationLogRootDir.getAbsolutePath, e)
+      if (operationLogRootDir.exists()) {
+        logInfo("Operation log root directory is created: " + operationLogRootDir.getAbsolutePath)
+        try {
+          FileUtils.forceDeleteOnExit(operationLogRootDir)
+        } catch {
+          case e: IOException =>
+            logWarning("Failed to schedule cleanup Spark Thrift Server's operation logging root" +
+              " dir: " + operationLogRootDir.getAbsolutePath, e)
+        }
+      } else {
+        logWarning("Operation log root directory is not created: "
+          + operationLogRootDir.getAbsolutePath)
       }
     }
   }
