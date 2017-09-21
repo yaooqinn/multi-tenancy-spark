@@ -113,7 +113,7 @@ class SparkHiveSessionImpl(
   private[this] def createSparkSession(): Unit = {
     val userName = sessionUGI.getShortUserName
     sparkConf.setAppName(s"SparkThriftServer[$userName]")
-    sparkConf.set("spark.ui.port", "0") // avoid max port retry reach
+    sparkConf.set("spark.ui.port", "0") // avoid max port retries reached
     try {
       _sparkSession = sessionUGI.doAs(new PrivilegedExceptionAction[SparkSession] {
         override def run(): SparkSession = {
@@ -297,9 +297,9 @@ class SparkHiveSessionImpl(
       removeSparkSession()
     } finally {
       release(true)
-      try
+      try {
         FileSystem.closeAllForUGI(sessionUGI)
-      catch {
+      } catch {
         case ioe: IOException =>
           throw new HiveSQLException("Could not clean up file-system handles for UGI: "
             + sessionUGI, ioe)
@@ -308,18 +308,21 @@ class SparkHiveSessionImpl(
   }
 
   private[this] def cleanupSessionLogDir(): Unit = {
-    if (_isOperationLogEnabled) try
-      FileUtils.forceDelete(sessionLogDir)
-    catch {
-      case e: Exception =>
-        logError("Failed to cleanup session log dir: " + sessionHandle, e)
+    if (_isOperationLogEnabled) {
+      try {
+        FileUtils.forceDelete(sessionLogDir)
+      } catch {
+        case e: Exception =>
+          logError("Failed to cleanup session log dir: " + sessionHandle, e)
+      }
     }
   }
 
   override def cancelOperation(opHandle: OperationHandle): Unit = {
     acquire(true)
-    try
+    try {
       operationManager.cancelOperation(opHandle)
+    }
     finally {
       release(true)
     }
@@ -389,9 +392,9 @@ class SparkHiveSessionImpl(
     try {
       for (operation <- operations) {
         opHandleSet.remove(operation.getHandle)
-        try
+        try {
           operation.close()
-        catch {
+        } catch {
           case e: Exception =>
             logWarning("Exception is thrown closing timed-out operation " + operation.getHandle, e)
         }
@@ -458,13 +461,13 @@ class SparkHiveSessionImpl(
     sessionLogDir = new File(operationLogRootDir, sessionHandle.getHandleIdentifier.toString)
     _isOperationLogEnabled = true
     if (!sessionLogDir.exists) {
-      if (!sessionLogDir.mkdir) {
+      if (!sessionLogDir.mkdirs) {
         logWarning("Unable to create operation log session directory: "
           + sessionLogDir.getAbsolutePath)
         _isOperationLogEnabled = false
       }
     }
-    if (isOperationLogEnabled) {
+    if (_isOperationLogEnabled) {
       logInfo("Operation log session directory is created: " + sessionLogDir.getAbsolutePath)
     }
   }
