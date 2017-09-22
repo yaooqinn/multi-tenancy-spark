@@ -165,13 +165,11 @@ private[hive] class ThriftServerSessionManager private(
                 + new Date(session.getLastAccessTime) + ") and will be closed")
               try {
                 closeSession(handle)
-              }
-              catch {
+              } catch {
                 case e: HiveSQLException =>
                   logWarning("Exception is thrown closing session " + handle, e)
               }
-            }
-            else {
+            } else {
               session.closeExpiredOperations()
             }
           }
