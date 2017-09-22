@@ -125,6 +125,8 @@ class SparkHiveSessionImpl(
         }
       })
       sessionManager.setSparkSession(userName, _sparkSession)
+      // set sc fully constructed immediately
+      sessionManager.setSCFullyConstructed(userName)
       ThriftServerMonitor.setListener(userName, new MultiTenancyThriftServerListener(sparkConf))
       _sparkSession.sparkContext.addSparkListener(ThriftServerMonitor.getListener(userName))
       val uiTab = new ThriftServerTab(userName, _sparkSession.sparkContext)
