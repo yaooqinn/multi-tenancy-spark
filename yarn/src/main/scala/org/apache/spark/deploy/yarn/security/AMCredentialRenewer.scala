@@ -107,6 +107,8 @@ private[yarn] class AMCredentialRenewer(
             writeNewCredentialsToHDFS(principal, keytab)
             cleanupOldFiles()
           } catch {
+            case e: InterruptedException =>
+              logWarning(s"Credential Refresh Thread Interrupted.", e)
             case e: Exception =>
               // Log the error and try to write new tokens back in an hour
               logWarning("Failed to write out new credentials to HDFS, will try again in an " +
@@ -231,6 +233,6 @@ private[yarn] class AMCredentialRenewer(
   }
 
   def stop(): Unit = {
-    credentialRenewer.shutdown()
+    credentialRenewer.shutdownNow()
   }
 }
