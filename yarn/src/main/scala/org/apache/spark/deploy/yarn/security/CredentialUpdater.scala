@@ -96,6 +96,9 @@ private[spark] class CredentialUpdater(
         TimeUnit.MINUTES.toMillis(1)
       }
     } catch {
+      case e: InterruptedException =>
+        logWarning("Credential Refresh Thread Interrupted.")
+        throw e
       // Since the file may get deleted while we are reading it, catch the Exception and come
       // back in an hour to try again
       case NonFatal(e) =>
@@ -129,7 +132,7 @@ private[spark] class CredentialUpdater(
 
   def stop(): Unit = {
     logInfo("CredentialUpdater Stopped!")
-    credentialUpdater.shutdown()
+    credentialUpdater.shutdownNow()
   }
 
 }
