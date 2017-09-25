@@ -36,7 +36,7 @@ import org.apache.hive.service.cli.operation.{Operation, OperationManager}
 import org.apache.hive.service.cli.session.{HiveSession, SessionManager}
 import org.apache.hive.service.cli.thrift.TProtocolVersion
 
-import org.apache.spark.{SparkConf, SparkException}
+import org.apache.spark.SparkConf
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.hive.HiveUtils
@@ -69,8 +69,9 @@ class SparkHiveSessionImpl(
         try {
           UserGroupInformation.createProxyUser(username, currentUser)
         } catch {
-          case e: IOException =>
-            throw new HiveSQLException("Couldn't setup proxy user", e)
+          case e: Exception =>
+            val errorMsg = s"${currentUser.getShortUserName} could not impersonate $username"
+            throw new HiveSQLException(errorMsg, e)
         }
       } else {
         UserGroupInformation.createRemoteUser(username)
@@ -88,14 +89,14 @@ class SparkHiveSessionImpl(
 
   private[this] def getOrCreateSparkSession(): Unit = synchronized {
     val userName = sessionUGI.getShortUserName
-    var checkRound = sparkConf.getInt("spark.yarn.report.times.on.start", 60) + 5
+    var checkRound = math.max(sparkConf.getInt("spark.yarn.report.times.on.start", 60), 15)
     val interval = sparkConf.getTimeAsMs("spark.yarn.report.interval", "1s")
     while (sessionManager.isSCPartiallyConstructed(userName)) {
       wait(interval)
       checkRound -= 1
       if (checkRound <= 0) {
-        throw new SparkException(s"A partially constructed SparkContext for [$userName] " +
-          s"has last more than 15 seconds")
+        throw new HiveSQLException(s"A partially constructed SparkContext for [$userName] " +
+          s"has last more than ${checkRound * interval} seconds")
       }
     }
 
@@ -133,7 +134,7 @@ class SparkHiveSessionImpl(
       ThriftServerMonitor.addUITab(_sparkSession.sparkContext.sparkUser, uiTab)
     } catch {
       case e: Exception =>
-        throw new SparkException(s"Failed Init SparkSession for user[$userName]", e)
+        throw new HiveSQLException(s"Failed Init SparkSession for user[$userName]", e)
     } finally {
       sessionManager.setSCFullyConstructed(userName)
     }
@@ -198,7 +199,7 @@ class SparkHiveSessionImpl(
   }
 
   override def getMetaStoreClient: IMetaStoreClient = {
-    throw new SparkException("Method Not Implemented!")
+    throw new HiveSQLException("Method Not Implemented!")
   }
 
   override def getInfo(getInfoType: GetInfoType): GetInfoValue = {
@@ -209,7 +210,7 @@ class SparkHiveSessionImpl(
         case GetInfoType.CLI_DBMS_NAME => new GetInfoValue("Spark SQL")
         case GetInfoType.CLI_DBMS_VER => new GetInfoValue(this._sparkSession.version)
         case _ =>
-          throw new SparkException("Unrecognized GetInfoType value: " + getInfoType.toString)
+          throw new HiveSQLException("Unrecognized GetInfoType value: " + getInfoType.toString)
       }
     } finally {
       release(true)
@@ -243,15 +244,15 @@ class SparkHiveSessionImpl(
   }
 
   override def getTypeInfo: OperationHandle = {
-    throw new SparkException("Method Not Implemented!")
+    throw new HiveSQLException("Method Not Implemented!")
   }
 
   override def getCatalogs: OperationHandle = {
-    throw new SparkException("Method Not Implemented!")
+    throw new HiveSQLException("Method Not Implemented!")
   }
 
   override def getSchemas(catalogName: String, schemaName: String): OperationHandle = {
-    throw new SparkException("Method Not Implemented!")
+    throw new HiveSQLException("Method Not Implemented!")
   }
 
   override def getTables(
@@ -259,12 +260,12 @@ class SparkHiveSessionImpl(
       schemaName: String,
       tableName: String,
       tableTypes: JList[String]): OperationHandle = {
-    throw new SparkException("Method Not Implemented!")
+    throw new HiveSQLException("Method Not Implemented!")
 
   }
 
   override def getTableTypes: OperationHandle = {
-    throw new SparkException("Method Not Implemented!")
+    throw new HiveSQLException("Method Not Implemented!")
   }
 
   override def getColumns(
@@ -272,12 +273,12 @@ class SparkHiveSessionImpl(
      schemaName: String,
      tableName: String,
      columnName: String): OperationHandle = {
-    throw new SparkException("Method Not Implemented!")
+    throw new HiveSQLException("Method Not Implemented!")
   }
 
   override def getFunctions(
       catalogName: String, schemaName: String, functionName: String): OperationHandle = {
-    throw new SparkException("Method Not Implemented!")
+    throw new HiveSQLException("Method Not Implemented!")
   }
 
   /**
@@ -367,15 +368,15 @@ class SparkHiveSessionImpl(
 
   override def getDelegationToken(
       authFactory: HiveAuthFactory, owner: String, renewer: String): String = {
-    throw new SparkException("Method Not Implemented!")
+    throw new HiveSQLException("Method Not Implemented!")
   }
 
   override def cancelDelegationToken(authFactory: HiveAuthFactory, tokenStr: String): Unit = {
-    throw new SparkException("Method Not Implemented!")
+    throw new HiveSQLException("Method Not Implemented!")
   }
 
   override def renewDelegationToken(authFactory: HiveAuthFactory, tokenStr: String): Unit = {
-    throw new SparkException("Method Not Implemented!")
+    throw new HiveSQLException("Method Not Implemented!")
   }
 
   override def closeExpiredOperations(): Unit = {
@@ -421,14 +422,14 @@ class SparkHiveSessionImpl(
    * @param sessionManager
    */
   override def setSessionManager(sessionManager: SessionManager): Unit = {
-    throw new SparkException("Method NOT Implemented!")
+    throw new HiveSQLException("Method NOT Implemented!")
   }
 
   /**
    * Get the session manager for the session
    */
   override def getSessionManager: SessionManager = {
-    throw new SparkException("Method NOT Implemented! Please use " +
+    throw new HiveSQLException("Method NOT Implemented! Please use " +
       "getThriftServerSessionManager instead!")
   }
 
@@ -484,7 +485,7 @@ class SparkHiveSessionImpl(
   override def getHiveConf: HiveConf = hiveConf
 
   override def getSessionState: SessionState = {
-    throw new SparkException("Method NOT Implemented!")
+    throw new HiveSQLException("Method NOT Implemented!")
   }
 
   override def setUserName(userName: String): Unit = {
