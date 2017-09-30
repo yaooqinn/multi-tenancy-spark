@@ -80,8 +80,17 @@ private[multitenancy] class ThriftServerOperationManager private(name: String)
 
   private[this] def getOperationLogByThread: OperationLog = OperationLog.getCurrentOperationLog
 
-  def getOperationLog: OperationLog =
-    Option(getOperationLogByThread).getOrElse(userToOperationLog.get(Utils.getCurrentUserName()))
+  private[this] def getOperationLogByName: OperationLog = {
+    if (!userToOperationLog.isEmpty) {
+      userToOperationLog.get(Utils.getCurrentUserName())
+    } else {
+      null
+    }
+  }
+
+  def getOperationLog: OperationLog = {
+    Option(getOperationLogByThread).getOrElse(getOperationLogByName)
+  }
 
   def setOperationLog(user: String, log: OperationLog): Unit = {
     OperationLog.setCurrentOperationLog(log)
