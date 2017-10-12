@@ -105,11 +105,12 @@ private[hive] class HiveClientImpl(
     // Switch to the initClassLoader.
     Thread.currentThread().setContextClassLoader(initClassLoader)
 
+    val tmpConf = new SparkConf(loadDefaults = true)
     // Set up kerberos credentials for UserGroupInformation.loginUser within
     // current class loader
     if (sparkConf.contains("spark.yarn.principal") && sparkConf.contains("spark.yarn.keytab")) {
       val principalName = sparkConf.get("spark.yarn.principal")
-      val keytabFileName = sparkConf.get("spark.yarn.keytab")
+      val keytabFileName = tmpConf.get("spark.yarn.keytab")
       if (!new File(keytabFileName).exists()) {
         throw new SparkException(s"Keytab file: ${keytabFileName}" +
           " specified in spark.yarn.keytab does not exist")
