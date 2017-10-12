@@ -101,7 +101,7 @@ class SparkHiveSessionImpl(
     }
 
     sessionManager.getExistSparkSession(userName) match {
-      case Some((ss, times)) =>
+      case Some((ss, times)) if !ss.sparkContext.isStopped =>
         logInfo(s"SparkSession for [$userName] is reused " + times.incrementAndGet() + "times")
         _sparkSession = ss.newSession()
       case _ =>
@@ -118,11 +118,19 @@ class SparkHiveSessionImpl(
     try {
       _sparkSession = sessionUGI.doAs(new PrivilegedExceptionAction[SparkSession] {
         override def run(): SparkSession = {
-          SparkSession.builder()
-            .config(sparkConf)
-            .enableHiveSupport()
-            .user(userName)
-            .getOrCreate()
+          try {
+            SparkSession.builder()
+              .config(sparkConf)
+              .enableHiveSupport()
+              .user(userName)
+              .getOrCreate()
+          } catch {
+            case e: Exception =>
+              val exception = new RuntimeException(
+                s"Failed initializing SparkSession for user[$userName] due to\n" +
+                  s" ${e.getMessage}", e)
+              throw exception
+          }
         }
       })
       sessionManager.setSparkSession(userName, _sparkSession)
@@ -133,8 +141,12 @@ class SparkHiveSessionImpl(
       val uiTab = new ThriftServerTab(userName, _sparkSession.sparkContext)
       ThriftServerMonitor.addUITab(_sparkSession.sparkContext.sparkUser, uiTab)
     } catch {
+      case re: RuntimeException =>
+        throw new HiveSQLException(re)
       case e: Exception =>
-        throw new HiveSQLException(s"Failed Init SparkSession for user[$userName]", e)
+        val hiveSQLException =
+          new HiveSQLException(s"Failed initializing SparkSession for user[$userName]", e)
+        throw hiveSQLException
     } finally {
       sessionManager.setSCFullyConstructed(userName)
     }
