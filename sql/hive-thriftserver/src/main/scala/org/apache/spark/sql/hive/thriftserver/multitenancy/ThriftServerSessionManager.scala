@@ -189,8 +189,8 @@ private[hive] class ThriftServerSessionManager private(
         while(!shutdown) {
           userToSparkSession.asScala.foreach {
             case (user, (session, times)) =>
-              if (times.get() <= 0) {
-                userToSparkSession.remove(user)
+              if (times.get() <= 0 || session.sparkContext.isStopped) {
+                removeSparkSession(user)
                 ThriftServerMonitor.detachUITab(user)
                 session.stop()
               }
@@ -322,7 +322,12 @@ private[hive] class ThriftServerSessionManager private(
     userToSparkSession.put(user, (sparkSession, new AtomicInteger(1)))
   }
 
+  def removeSparkSession(user: String): Unit = {
+    userToSparkSession.remove(user)
+  }
+
   def setSCPartiallyConstructed(user: String): Unit = {
+    removeSparkSession(user)
     userSparkContextBeingConstruct.add(user)
   }
 
