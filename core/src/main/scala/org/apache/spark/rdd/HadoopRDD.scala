@@ -367,7 +367,7 @@ private[spark] object HadoopRDD extends Logging {
   /** Update the input bytes read metric each time this number of records has been read */
   val RECORDS_BETWEEN_BYTES_READ_METRIC_UPDATES = 256
 
-  private val user = Utils.getCurrentUserName
+  private def user = Utils.getCurrentUserName
 
   /**
    * The three methods below are helpers for accessing the local map, a property of the SparkEnv of
