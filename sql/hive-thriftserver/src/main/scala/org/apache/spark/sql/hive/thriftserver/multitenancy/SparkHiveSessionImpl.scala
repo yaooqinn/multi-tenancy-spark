@@ -36,7 +36,7 @@ import org.apache.hive.service.cli.operation.{Operation, OperationManager}
 import org.apache.hive.service.cli.session.{HiveSession, SessionManager}
 import org.apache.hive.service.cli.thrift.TProtocolVersion
 
-import org.apache.spark.SparkConf
+import org.apache.spark.{CredentialCache, SparkConf}
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.hive.HiveUtils
@@ -67,7 +67,11 @@ class SparkHiveSessionImpl(
     if (withImpersonation) {
       if (UserGroupInformation.isSecurityEnabled) {
         try {
-          UserGroupInformation.createProxyUser(username, currentUser)
+          val proxyUgi = UserGroupInformation.createProxyUser(username, currentUser)
+          Option(CredentialCache.get(username)).foreach { credentials =>
+            proxyUgi.addCredentials(credentials)
+          }
+          proxyUgi
         } catch {
           case e: Exception =>
             val errorMsg = s"${currentUser.getShortUserName} could not impersonate $username"
