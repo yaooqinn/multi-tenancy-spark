@@ -67,11 +67,7 @@ class SparkHiveSessionImpl(
     if (withImpersonation) {
       if (UserGroupInformation.isSecurityEnabled) {
         try {
-          val proxyUgi = UserGroupInformation.createProxyUser(username, currentUser)
-          Option(CredentialCache.get(username)).foreach { credentials =>
-            proxyUgi.addCredentials(credentials)
-          }
-          proxyUgi
+          UserGroupInformation.createProxyUser(username, currentUser)
         } catch {
           case e: Exception =>
             val errorMsg = s"${currentUser.getShortUserName} could not impersonate $username"
@@ -107,6 +103,9 @@ class SparkHiveSessionImpl(
     sessionManager.getExistSparkSession(userName) match {
       case Some((ss, times)) if !ss.sparkContext.isStopped =>
         logInfo(s"SparkSession for [$userName] is reused " + times.incrementAndGet() + "times")
+        Option(CredentialCache.get(userName)).foreach { credentials =>
+          sessionUGI.addCredentials(credentials)
+        }
         _sparkSession = ss.newSession()
       case _ =>
         sessionManager.setSCPartiallyConstructed(userName)
