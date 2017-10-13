@@ -50,6 +50,4 @@ private[spark] object CredentialCache {
   def get(user: String): Credentials = {
     credentials.get(user)
   }
-
-
 }
