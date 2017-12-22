@@ -430,6 +430,7 @@ private[client] class Shim_v0_12 extends Shim with Logging {
    */
   override def authorize(sql: String): Unit = {
     val state = SessionState.get
+    state.setupQueryCurrentTimestamp()
     val conf = state.getConf
     if (conf.getBoolVar(HiveConf.ConfVars.HIVE_AUTHORIZATION_ENABLED)) {
       val origin = Thread.currentThread().getContextClassLoader
