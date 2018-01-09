@@ -69,9 +69,11 @@
 export JAVA_HOME="${JAVA_HOME:-$HOME/java-current}"
 
 ## Default Settings For YARN
-export YARN_CLIENT_HOME="$YARN_CLIENT_HOME:-$HOME/yarn-current"
-export HADOOP_HOME="${YARN_CLIENT_HOME:-$HOME/hadoop-current}"
+export HADOOP_HOME="${HADOOP_HOME:-$HOME/hadoop-current}"
+export YARN_HOME="${YARN_HOME:-$HOME/yarn-current}"
+
 export HADOOP_CONF_DIR="${HADOOP_CONF_DIR:-$HADOOP_HOME/etc/hadoop}"
+export YARN_CONF_DIR="${YARN_CONF_DIR:-YARN_HOME/etc/hadoop}"
 
 ## Default Settings For Spark
 export SPARK_HOME="$(cd "$(dirname "$0")"/..; pwd)"

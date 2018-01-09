@@ -17,7 +17,9 @@
   -->
 
 <configuration>
-    <!-- ====== Hive MetaStore Database ===== -->
+    <!-- +------------------------------------------+ -->
+    <!-- |-------- Hive MetaStore Database ---------| -->
+    <!-- +------------------------------------------+ -->
 
     <property>
       <name>javax.jdo.option.ConnectionURL</name>
@@ -43,10 +45,9 @@
       <description>password for connecting to mysql server</description>
     </property>
 
-    <!-- ===== Hive MetaStore Database ===== -->
-
-
-    <!-- ===== Hive MetaStore Server ===== -->
+    <!-- +------------------------------------------+ -->
+    <!-- |--------- Hive MetaStore Server ----------| -->
+    <!-- +------------------------------------------+ -->
 
     <property>
       <name>hive.metastore.uris</name>
@@ -72,29 +73,15 @@
       <description>The path to the Kerberos Keytab file containing the metastore thrift server's service principal.</description>
     </property>
 
-    <!-- ===== Hive MetaStore Server ===== -->
+    <!-- +------------------------------------------+ -->
+    <!-- |---------- Hadoop Impersonation ----------| -->
+    <!-- +------------------------------------------+ -->
 
     <property>
-      <name>hive.security.metastore.authorization.manager</name>
-      <value>org.apache.hadoop.hive.ql.security.authorization.StorageBasedAuthorizationProvider</value>
-      <description>
-          authorization manager class name to be used in the metastore for authorization.
-          The user defined authorization class should implement interface
-          org.apache.hadoop.hive.ql.security.authorization.HiveMetastoreAuthorizationProvider.
-      </description>
+        <name>hive.server2.enable.doAs</name>
+        <value>true</value>
     </property>
 
-    <property>
-      <name>hive.security.metastore.authenticator.manager</name>
-      <value>org.apache.hadoop.hive.ql.security.HadoopDefaultMetastoreAuthenticator</value>
-      <description>
-          authenticator manager class name to be used in the metastore for authentication.
-          The user defined authenticator should implement interface
-          org.apache.hadoop.hive.ql.security.HiveAuthenticationProvider.
-      </description>
-    </property>
-
-    <!-- Impersonation-->
     <property>
         <name>hadoop.proxyuser.hive.hosts</name>
         <value>*</value>
@@ -121,11 +108,9 @@
         <value>*</value>
     </property>
 
-    <!-- Hive Server2 -->
-    <property>
-        <name>hive.server2.enable.doAs</name>
-        <value>true</value>
-    </property>
+    <!-- +------------------------------------------+ -->
+    <!-- |------------   HiveServer2    ------------| -->
+    <!-- +------------------------------------------+ -->
 
     <property>
         <name>hive.server2.thrift.port</name>
@@ -135,6 +120,16 @@
     <property>
         <name>hive.server2.authentication</name>
         <value>KERBEROS</value>
+    </property>
+
+    <property>
+        <name>hive.server2.authentication.kerberos.keytab</name>
+        <value></value>
+    </property>
+
+    <property>
+        <name>hive.server2.authentication.kerberos.principal</name>
+        <value></value>
     </property>
 
     <property>
