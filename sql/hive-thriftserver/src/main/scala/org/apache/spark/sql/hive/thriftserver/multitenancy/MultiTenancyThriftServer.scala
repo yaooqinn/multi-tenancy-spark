@@ -124,11 +124,13 @@ private[multitenancy] class MultiTenancyThriftServer private (name: String)
         .creatingParentsIfNeeded
         .withMode(CreateMode.PERSISTENT)
         .forPath(ZooKeeperHiveHelper.ZOOKEEPER_PATH_SEPARATOR + rootNamespace)
-      logInfo("Created the root name space: " + rootNamespace + " on ZooKeeper for HiveServer2")
+      logInfo("Created the root name space: " + rootNamespace +
+        " on ZooKeeper for Multi Tenancy Spark Thrift Server")
     } catch {
       case e: KeeperException =>
         if (e.code ne KeeperException.Code.NODEEXISTS) {
-          logError("Unable to create HiveServer2 namespace: " + rootNamespace + " on ZooKeeper", e)
+          logError("Unable to create Multi Tenancy Spark Thrift Server namespace: "
+            + rootNamespace + " on ZooKeeper", e)
           throw e
         }
     }
@@ -159,9 +161,11 @@ private[multitenancy] class MultiTenancyThriftServer private (name: String)
       if (zooKeeperClient.checkExists.usingWatcher(new DeRegisterWatcher)
         .forPath(znodePath) == null) {
         // No node exists, throw exception
-        throw new Exception("Unable to create znode for this HiveServer2 instance on ZooKeeper.")
+        throw new Exception("Unable to create znode for this Multi Tenancy Spark Thrift Server" +
+          " instance on ZooKeeper.")
       }
-      logInfo("Created a znode on ZooKeeper for HiveServer2 uri: " + instanceURI)
+      logInfo("Created a znode on ZooKeeper for Multi Tenancy Spark Thrift Server uri: "
+        + instanceURI)
     } catch {
       case e: Exception =>
         logError("Unable to create a znode for this server instance", e)
