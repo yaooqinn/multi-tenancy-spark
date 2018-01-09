@@ -40,7 +40,7 @@ class ThriftClientCLIService private(name: String, cliService: ThriftServerCLISe
   extends AbstractService(name) with TCLIService.Iface with Runnable with Logging {
 
   private[this] var hiveConf: HiveConf = _
-  private[this] var hiveAuthFactory: HiveAuthFactory = null
+  private[this] var hiveAuthFactory: HiveAuthFactory = _
 
   private[this] val OK_STATUS = new TStatus(TStatusCode.SUCCESS_STATUS)
 
@@ -82,7 +82,7 @@ class ThriftClientCLIService private(name: String, cliService: ThriftServerCLISe
         serverContext: ServerContext, tProtocol: TProtocol, tProtocol1: TProtocol): Unit = {
       Option(serverContext.asInstanceOf[ThriftClientCLIServerContext]
         .getSessionHandle).foreach { sessionHandle =>
-        logWarning(s"Session [${sessionHandle}] disconnected without closing properly, " +
+        logWarning(s"Session [$sessionHandle] disconnected without closing properly, " +
           s"close it now")
         Try {cliService.closeSession(sessionHandle)} match {
           case Failure(exception) =>
@@ -209,7 +209,7 @@ class ThriftClientCLIService private(name: String, cliService: ThriftServerCLISe
     proxyUser
   }
 
-  private[this] def getIpAddress(): String = {
+  private[this] def getIpAddress: String = {
     if (isKerberosAuthMode) {
       hiveAuthFactory.getIpAddress
     } else {
@@ -235,11 +235,6 @@ class ThriftClientCLIService private(name: String, cliService: ThriftServerCLISe
 
   /**
    * Create a session handle
-   *
-   * @param req
-   * @param res
-   * @return
-   * @throws HiveSQLException
    */
   @throws[HiveSQLException]
   private[this] def getSessionHandle(req: TOpenSessionReq, res: TOpenSessionResp) = {
@@ -277,7 +272,7 @@ class ThriftClientCLIService private(name: String, cliService: ThriftServerCLISe
         logWarning("Error opening session: ", e)
         resp.setStatus(HiveSQLException.toTStatus(e))
     }
-    return resp
+    resp
 
   }
 
@@ -297,7 +292,7 @@ class ThriftClientCLIService private(name: String, cliService: ThriftServerCLISe
         logWarning("Error closing session: ", e)
         resp.setStatus(HiveSQLException.toTStatus(e))
     }
-    return resp
+    resp
   }
 
   override def GetInfo(req: TGetInfoReq): TGetInfoResp = {
@@ -312,7 +307,7 @@ class ThriftClientCLIService private(name: String, cliService: ThriftServerCLISe
         logWarning("Error getting info: ", e)
         resp.setStatus(HiveSQLException.toTStatus(e))
     }
-    return resp
+    resp
   }
 
   override def ExecuteStatement(req: TExecuteStatementReq): TExecuteStatementResp = {
@@ -334,7 +329,7 @@ class ThriftClientCLIService private(name: String, cliService: ThriftServerCLISe
         logWarning("Error executing statement: ", e)
         resp.setStatus(HiveSQLException.toTStatus(e))
     }
-    return resp
+    resp
   }
 
   override def GetTypeInfo(req: TGetTypeInfoReq): TGetTypeInfoResp = {
@@ -348,7 +343,7 @@ class ThriftClientCLIService private(name: String, cliService: ThriftServerCLISe
         logWarning("Error getting type info: ", e)
         resp.setStatus(HiveSQLException.toTStatus(e))
     }
-    return resp
+    resp
   }
 
   override def GetCatalogs(req: TGetCatalogsReq): TGetCatalogsResp = {
@@ -362,7 +357,7 @@ class ThriftClientCLIService private(name: String, cliService: ThriftServerCLISe
         logWarning("Error getting catalogs: ", e)
         resp.setStatus(HiveSQLException.toTStatus(e))
     }
-    return resp
+    resp
   }
 
   override def GetSchemas(req: TGetSchemasReq): TGetSchemasResp = {
@@ -377,7 +372,7 @@ class ThriftClientCLIService private(name: String, cliService: ThriftServerCLISe
         logWarning("Error getting schemas: ", e)
         resp.setStatus(HiveSQLException.toTStatus(e))
     }
-    return resp
+    resp
   }
 
   override def GetTables(req: TGetTablesReq): TGetTablesResp = {
@@ -392,7 +387,7 @@ class ThriftClientCLIService private(name: String, cliService: ThriftServerCLISe
         logWarning("Error getting tables: ", e)
         resp.setStatus(HiveSQLException.toTStatus(e))
     }
-    return resp
+    resp
   }
 
   override def GetTableTypes(req: TGetTableTypesReq): TGetTableTypesResp = {
@@ -406,7 +401,7 @@ class ThriftClientCLIService private(name: String, cliService: ThriftServerCLISe
         logWarning("Error getting table types: ", e)
         resp.setStatus(HiveSQLException.toTStatus(e))
     }
-    return resp
+    resp
   }
 
   override def GetColumns(req: TGetColumnsReq): TGetColumnsResp = {
@@ -422,7 +417,7 @@ class ThriftClientCLIService private(name: String, cliService: ThriftServerCLISe
         logWarning("Error getting columns: ", e)
         resp.setStatus(HiveSQLException.toTStatus(e))
     }
-    return resp
+    resp
   }
 
   override def GetFunctions(req: TGetFunctionsReq): TGetFunctionsResp = {
@@ -438,7 +433,7 @@ class ThriftClientCLIService private(name: String, cliService: ThriftServerCLISe
         logWarning("Error getting functions: ", e)
         resp.setStatus(HiveSQLException.toTStatus(e))
     }
-    return resp
+    resp
   }
 
   override def GetOperationStatus(req: TGetOperationStatusReq): TGetOperationStatusResp = {
@@ -459,7 +454,7 @@ class ThriftClientCLIService private(name: String, cliService: ThriftServerCLISe
         logWarning("Error getting operation status: ", e)
         resp.setStatus(HiveSQLException.toTStatus(e))
     }
-    return resp
+    resp
   }
 
   override def CancelOperation(req: TCancelOperationReq): TCancelOperationResp = {
@@ -472,7 +467,7 @@ class ThriftClientCLIService private(name: String, cliService: ThriftServerCLISe
         logWarning("Error cancelling operation: ", e)
         resp.setStatus(HiveSQLException.toTStatus(e))
     }
-    return resp
+    resp
   }
 
   override def CloseOperation(req: TCloseOperationReq): TCloseOperationResp = {
@@ -485,7 +480,7 @@ class ThriftClientCLIService private(name: String, cliService: ThriftServerCLISe
         logWarning("Error closing operation: ", e)
         resp.setStatus(HiveSQLException.toTStatus(e))
     }
-    return resp
+    resp
   }
 
   override def GetResultSetMetadata(req: TGetResultSetMetadataReq): TGetResultSetMetadataResp = {
@@ -499,7 +494,7 @@ class ThriftClientCLIService private(name: String, cliService: ThriftServerCLISe
         logWarning("Error getting result set metadata: ", e)
         resp.setStatus(HiveSQLException.toTStatus(e))
     }
-    return resp
+    resp
   }
 
   override def FetchResults(req: TFetchResultsReq): TFetchResultsResp = {
@@ -518,13 +513,13 @@ class ThriftClientCLIService private(name: String, cliService: ThriftServerCLISe
         logWarning("Error fetching results: ", e)
         resp.setStatus(HiveSQLException.toTStatus(e))
     }
-    return resp
+    resp
   }
 
   override def GetDelegationToken(req: TGetDelegationTokenReq): TGetDelegationTokenResp = {
     val resp = new TGetDelegationTokenResp
     resp.setStatus(notSupportTokenErrorStatus)
-    return resp
+    resp
   }
 
   private[this] def notSupportTokenErrorStatus = {
@@ -536,13 +531,13 @@ class ThriftClientCLIService private(name: String, cliService: ThriftServerCLISe
   override def CancelDelegationToken(req: TCancelDelegationTokenReq): TCancelDelegationTokenResp = {
     val resp = new TCancelDelegationTokenResp
     resp.setStatus(notSupportTokenErrorStatus)
-    return resp
+    resp
   }
 
   override def RenewDelegationToken(req: TRenewDelegationTokenReq): TRenewDelegationTokenResp = {
     val resp = new TRenewDelegationTokenResp
     resp.setStatus(notSupportTokenErrorStatus)
-    return resp
+    resp
   }
 
   override def run(): Unit = {
@@ -592,8 +587,8 @@ class ThriftClientCLIService private(name: String, cliService: ThriftServerCLISe
       server.foreach(_.serve())
     } catch {
       case t: Throwable =>
-        logError("Error starting HiveServer2: could not start "
-          + classOf[ThriftBinaryCLIService].getSimpleName, t)
+        logError("Error starting Multi Tenancy Spark Thrift Server: could not start "
+          + classOf[ThriftClientCLIService].getSimpleName, t)
         System.exit(-1)
     }
   }
