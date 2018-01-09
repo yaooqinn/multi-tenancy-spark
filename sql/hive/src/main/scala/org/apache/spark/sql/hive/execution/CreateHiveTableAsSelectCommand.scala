@@ -19,7 +19,7 @@ package org.apache.spark.sql.hive.execution
 
 import scala.util.control.NonFatal
 
-import org.apache.spark.sql.{AnalysisException, Row, SparkSession}
+import org.apache.spark.sql.{AnalysisException, Dataset, Row, SparkSession}
 import org.apache.spark.sql.catalyst.catalog.CatalogTable
 import org.apache.spark.sql.catalyst.plans.logical.{InsertIntoTable, LogicalPlan, OverwriteOptions}
 import org.apache.spark.sql.execution.command.RunnableCommand
@@ -90,6 +90,12 @@ case class CreateHiveTableAsSelectCommand(
         sparkSession.sessionState.executePlan(InsertIntoTable(
           metastoreRelation, Map(), query, overwrite = OverwriteOptions(true),
           ifNotExists = false)).toRdd
+
+        val rowCount = Dataset.ofRows(sparkSession, metastoreRelation).count()
+        val oldTable = metastoreRelation.catalogTable
+        val newTable =
+          oldTable.copy(properties = oldTable.properties ++ Map("numRows" -> rowCount.toString))
+        sparkSession.sessionState.catalog.alterTable(newTable)
       } catch {
         case NonFatal(e) =>
           // drop the created table.
