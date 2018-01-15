@@ -23,7 +23,9 @@ import scala.util.control.NonFatal
 
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.{FileSystem, Path}
-import org.apache.hadoop.security.{Credentials, UserGroupInformation}
+import org.apache.hadoop.ipc.RemoteException
+import org.apache.hadoop.security.Credentials
+import org.apache.hadoop.security.token.SecretManager.InvalidToken
 
 import org.apache.spark.{CredentialCache, SparkConf}
 import org.apache.spark.deploy.SparkHadoopUtil
@@ -101,6 +103,9 @@ private[spark] class CredentialUpdater(
         throw e
       // Since the file may get deleted while we are reading it, catch the Exception and come
       // back in an hour to try again
+      case re: RemoteException if re.unwrapRemoteException().isInstanceOf[InvalidToken] =>
+        stop()
+        throw re
       case NonFatal(e) =>
         logWarning("Error while trying to update credentials, will try again in 1 hour", e)
         TimeUnit.HOURS.toMillis(1)
@@ -131,7 +136,7 @@ private[spark] class CredentialUpdater(
   }
 
   def stop(): Unit = {
-    logInfo("CredentialUpdater Stopped!")
+    logInfo(s"${user}'s CredentialUpdater Stopped! ")
     credentialUpdater.shutdownNow()
   }
 

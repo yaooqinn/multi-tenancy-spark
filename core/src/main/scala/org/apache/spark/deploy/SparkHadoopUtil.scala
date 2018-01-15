@@ -28,17 +28,17 @@ import scala.util.control.NonFatal
 
 import com.google.common.primitives.Longs
 import org.apache.hadoop.conf.Configuration
-import org.apache.hadoop.fs.FileSystem.Statistics
 import org.apache.hadoop.fs.{FileStatus, FileSystem, Path, PathFilter}
+import org.apache.hadoop.fs.FileSystem.Statistics
 import org.apache.hadoop.mapred.JobConf
-import org.apache.hadoop.security.token.delegation.AbstractDelegationTokenIdentifier
-import org.apache.hadoop.security.token.{Token, TokenIdentifier}
 import org.apache.hadoop.security.{Credentials, UserGroupInformation}
+import org.apache.hadoop.security.token.{Token, TokenIdentifier}
+import org.apache.hadoop.security.token.delegation.AbstractDelegationTokenIdentifier
 
+import org.apache.spark.{SparkConf, SparkException}
 import org.apache.spark.annotation.DeveloperApi
 import org.apache.spark.internal.Logging
 import org.apache.spark.util.Utils
-import org.apache.spark.{SparkConf, SparkException}
 
 /**
  * :: DeveloperApi ::
@@ -311,7 +311,7 @@ class SparkHadoopUtil extends Logging {
     } catch {
       case NonFatal(e) =>
         logWarning("Error while attempting to list files from application staging dir", e)
-        Array.empty
+        throw e
     }
   }
 
