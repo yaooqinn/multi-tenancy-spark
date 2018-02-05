@@ -39,6 +39,7 @@ import org.apache.hive.service.cli.thrift.TProtocolVersion
 import org.apache.spark.{CredentialCache, SparkConf}
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.SparkSession
+import org.apache.spark.sql.catalyst.optimizer.Authorizer
 import org.apache.spark.sql.hive.HiveUtils
 import org.apache.spark.sql.hive.thriftserver.monitor.{MultiTenancyThriftServerListener, ThriftServerMonitor}
 import org.apache.spark.sql.hive.thriftserver.ui.ThriftServerTab
@@ -208,6 +209,9 @@ class SparkHiveSessionImpl(
         _sparkSession.sql(initialDatabase)
       }
     })
+    // Hive set up connection without initial db check, so we follow that and add rule here to
+    // escape that action.
+    _sparkSession.experimental.extraOptimizations ++= Seq(Authorizer)
     _sparkSession.conf.set("spark.sql.hive.version", HiveUtils.hiveExecutionVersion)
     lastAccessTime = System.currentTimeMillis
     lastIdleTime = lastAccessTime

@@ -22,32 +22,29 @@ import java.lang.reflect.{InvocationTargetException, Method, Modifier}
 import java.net.URI
 import java.util.{ArrayList => JArrayList, List => JList, Map => JMap, Set => JSet}
 import java.util.concurrent.TimeUnit
+
 import scala.collection.JavaConverters._
-import scala.util.Try
 import scala.util.control.NonFatal
 
 import org.apache.hadoop.fs.{FileSystem, Path}
 import org.apache.hadoop.hive.conf.HiveConf
-import org.apache.hadoop.hive.metastore.api.{FunctionType, MetaException, PrincipalType, ResourceType, ResourceUri, Function => HiveFunction}
-import org.apache.hadoop.hive.ql.{Context, Driver}
+import org.apache.hadoop.hive.metastore.api.{Function => HiveFunction, FunctionType, MetaException, PrincipalType, ResourceType, ResourceUri}
+import org.apache.hadoop.hive.ql.Driver
 import org.apache.hadoop.hive.ql.metadata.{Hive, HiveException, Partition, Table}
-import org.apache.hadoop.hive.ql.parse.HiveParser
 import org.apache.hadoop.hive.ql.plan.AddPartitionDesc
 import org.apache.hadoop.hive.ql.processors.{CommandProcessor, CommandProcessorFactory}
 import org.apache.hadoop.hive.ql.session.SessionState
 import org.apache.hadoop.hive.serde.serdeConstants
+
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.FunctionIdentifier
 import org.apache.spark.sql.catalyst.analysis.NoSuchPermanentFunctionException
 import org.apache.spark.sql.catalyst.catalog.{CatalogFunction, CatalogTablePartition, FunctionResource, FunctionResourceType}
 import org.apache.spark.sql.catalyst.expressions._
-import org.apache.spark.sql.catalyst.parser.ParserUtils
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.{IntegralType, StringType}
 import org.apache.spark.util.Utils
-
-import org.apache.hadoop.hive.ql.parse.{BaseSemanticAnalyzer, ParseDriver, ParseUtils, SemanticAnalyzerFactory}
 
 /**
  * A shim that defines the interface between [[HiveClientImpl]] and the underlying Hive library used
@@ -148,13 +145,6 @@ private[client] sealed abstract class Shim {
       part: JList[String],
       deleteData: Boolean,
       purge: Boolean): Unit
-
-  /**
-   * try to authorize privilege of executing the sql statement to current user
-   *
-   * @param sql the sql statement provided by current user
-   */
-  def authorize(sql: String): Unit
 
   protected def findStaticMethod(klass: Class[_], name: String, args: Class[_]*): Method = {
     val method = findMethod(klass, name, args: _*)
@@ -421,58 +411,6 @@ private[client] class Shim_v0_12 extends Shim with Logging {
 
   def listFunctions(hive: Hive, db: String, pattern: String): Seq[String] = {
     Seq.empty[String]
-  }
-
-  /**
-   * try to authorize privilege of executing the sql statement to current user
-   *
-   * @param sql the sql statement provided by current user
-   */
-  override def authorize(sql: String): Unit = {
-    val state = SessionState.get
-    state.setupQueryCurrentTimestamp()
-    val conf = state.getConf
-    if (conf.getBoolVar(HiveConf.ConfVars.HIVE_AUTHORIZATION_ENABLED)) {
-      val origin = Thread.currentThread().getContextClassLoader
-      Thread.currentThread().setContextClassLoader(state.getClass.getClassLoader)
-
-      val scanCols = conf.getBoolVar(HiveConf.ConfVars.HIVE_STATS_COLLECT_SCANCOLS)
-      val runCBO = conf.getBoolVar(HiveConf.ConfVars.HIVE_CBO_ENABLED)
-      val limit = conf.getIntVar(HiveConf.ConfVars.HIVELIMITTABLESCANPARTITION)
-      conf.setBoolVar(HiveConf.ConfVars.HIVE_STATS_COLLECT_SCANCOLS, false)
-      conf.setBoolVar(HiveConf.ConfVars.HIVE_CBO_ENABLED, false)
-      conf.setIntVar(HiveConf.ConfVars.HIVELIMITTABLESCANPARTITION, -1)
-
-      val ctx = new Context(conf)
-      val txnMgr = state.initTxnMgr(conf)
-
-      ctx.setTryCount(Int.MaxValue)
-      ctx.setHDFSCleanup(true)
-      ctx.setCmd(sql)
-      ctx.setHiveTxnManager(txnMgr)
-      ctx.setExplain(true)
-
-      val parser = new ParseDriver
-      val tree = ParseUtils.findRootNonNullToken(parser.parse(sql, ctx))
-      val analyzer = SemanticAnalyzerFactory.get(conf, tree)
-      analyzer.analyze(tree, ctx)
-
-      if (!analyzer.skipAuthorization()) {
-        Driver.doAuthorization(analyzer, sql)
-      }
-
-      tree.getType match {
-        case HiveParser.TOK_SWITCHDATABASE =>
-          val db = sql.trim.split("\\s+")(1)
-          state.setCurrentDatabase(db)
-        case _ =>
-      }
-
-      conf.setBoolVar(HiveConf.ConfVars.HIVE_STATS_COLLECT_SCANCOLS, scanCols)
-      conf.setBoolVar(HiveConf.ConfVars.HIVE_CBO_ENABLED, runCBO)
-      conf.setIntVar(HiveConf.ConfVars.HIVELIMITTABLESCANPARTITION, limit)
-      Thread.currentThread().setContextClassLoader(origin)
-    }
   }
 }
 
@@ -902,5 +840,4 @@ private[client] class Shim_v1_2 extends Shim_v1_1 {
       case e: InvocationTargetException => throw e.getCause()
     }
   }
-
 }

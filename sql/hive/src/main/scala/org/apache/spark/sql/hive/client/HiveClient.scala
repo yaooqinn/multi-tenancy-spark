@@ -19,6 +19,7 @@ package org.apache.spark.sql.hive.client
 
 import java.io.PrintStream
 
+import org.apache.spark.sql.Authorizable
 import org.apache.spark.sql.catalyst.analysis._
 import org.apache.spark.sql.catalyst.catalog._
 import org.apache.spark.sql.catalyst.catalog.CatalogTypes.TablePartitionSpec
@@ -30,10 +31,7 @@ import org.apache.spark.sql.catalyst.expressions.Expression
  * internal and external classloaders for a given version of Hive and thus must expose only
  * shared classes.
  */
-private[hive] trait HiveClient {
-
-  /** Returns the Hive Version of this client. */
-  def version: HiveVersion
+private[hive] trait HiveClient extends Authorizable {
 
   /** Returns the configuration for the given key in the current session. */
   def getConf(key: String, defaultValue: String): String
@@ -270,19 +268,11 @@ private[hive] trait HiveClient {
   /** Used for testing only.  Removes all metadata from this instance of Hive. */
   def reset(): Unit
 
-  /**
-   * try to authorize privilege of executing the sql statement to current user
-   *
-   * @param sql the sql statement provided by current user
-   */
-  def authorize(sql: String): Unit
-
   /** get the current database in [[org.apache.hadoop.hive.ql.session.SessionState]] */
-  def getCurrentDatabase(): String
-
+  def getCurrentDatabase: String
 
   /** get the current user in [[org.apache.hadoop.hive.ql.session.SessionState]] */
-  def getCurrentUser(): String
+  def getCurrentUser: String
 
   def close(): Unit
 

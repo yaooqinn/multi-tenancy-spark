@@ -1030,15 +1030,7 @@ object SparkSession extends Logging{
 
   private[sql] def getActiveSession: Option[SparkSession] = {
     val defaultUser = Utils.getCurrentUserName()
-    logWarning(
-      s"""
-         | In Netease Spark, we support multi-tenancy with SparkSession/SparkContext,
-         | which means they are all user-specified. Please call this method by its user
-         | specified version, if you do initialize SparkSession/SparkContext with a particular
-         | user. Ignore this if you initialize them with no user specified and we may do the
-         | getActiveSession with a default user [$defaultUser]
-       """.stripMargin)
-
+    logInfo(s"Get Active Session for [$defaultUser]")
     getActiveSession(defaultUser)
   }
 
@@ -1057,15 +1049,7 @@ object SparkSession extends Logging{
 
   private[sql] def getDefaultSession: Option[SparkSession] = {
     val defaultUser = Utils.getCurrentUserName()
-    logWarning(
-      s"""
-         | In Netease Spark, we support multi-tenancy with SparkSession/SparkContext,
-         | which means they are all user-specified. Please call this method by its user
-         | specified version, if you do initialize SparkSession/SparkContext with a particular
-         | user. Ignore this if you initialize them with no user specified and we may do the
-         | [getDefaultSession] with a default user [$defaultUser]
-       """.stripMargin)
-
+    logInfo(s"Get Default Session for [$defaultUser]")
     getDefaultSession(defaultUser)
   }
 
