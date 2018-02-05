@@ -36,6 +36,11 @@
 
   <dependencies>
     <dependency>
+      <groupId>yaooqinn</groupId>
+      <artifactId>spark-authorizer</artifactId>
+      <version>1.1.1.spark2.1</version>
+    </dependency>
+    <dependency>
       <groupId>com.univocity</groupId>
       <artifactId>univocity-parsers</artifactId>
       <version>2.2.1</version>

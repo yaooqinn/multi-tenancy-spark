@@ -168,9 +168,7 @@ private[hive] class SparkExecuteStatementOperation(
               try {
                 execute()
               } catch {
-                case e: HiveSQLException =>
-                  setOperationException(e)
-                  logError("Error running hive query: ", e)
+                case e: HiveSQLException => setOperationException(e)
               } finally {
                 unregisterOperationLog()
               }
@@ -181,8 +179,7 @@ private[hive] class SparkExecuteStatementOperation(
           } catch {
             case e: Exception =>
               setOperationException(new HiveSQLException(e))
-              logError("Error running hive query as user : " +
-                sparkServiceUGI.getShortUserName, e)
+              logError("Error running hive query as user : " + sparkServiceUGI.getShortUserName, e)
           }
         }
       }
@@ -228,7 +225,6 @@ private[hive] class SparkExecuteStatementOperation(
       sparkSession.sparkContext.setLocalProperty("spark.scheduler.pool", pool)
     }
     try {
-      client.authorize(statement)
       result = Dataset.ofRows(sparkSession, plan)
       ThriftServerMonitor.getListener(parentSession.getUserName)
         .onStatementParsed(statementId, result.queryExecution.toString())
@@ -267,8 +263,7 @@ private[hive] class SparkExecuteStatementOperation(
       case e: Throwable =>
         val currentState = getStatus.getState
         logError(s"Error executing query, currentState $currentState, ", e)
-        if (currentState == OperationState.CANCELED
-          || currentState == OperationState.CLOSED) {
+        if (currentState == OperationState.CANCELED || currentState == OperationState.CLOSED) {
           return
         } else {
           setState(OperationState.ERROR)
