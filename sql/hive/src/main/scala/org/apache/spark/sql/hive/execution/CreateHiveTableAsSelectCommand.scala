@@ -93,8 +93,11 @@ case class CreateHiveTableAsSelectCommand(
 
         val rowCount = Dataset.ofRows(sparkSession, metastoreRelation).count()
         val oldTable = metastoreRelation.catalogTable
+        val newProps = Map(
+          "numRows" -> rowCount.toString,
+          "STATS_GENERATED_VIA_STATS_TASK" -> "true")
         val newTable =
-          oldTable.copy(properties = oldTable.properties ++ Map("numRows" -> rowCount.toString))
+          oldTable.copy(properties = oldTable.properties ++ newProps)
         sparkSession.sessionState.catalog.alterTable(newTable)
       } catch {
         case NonFatal(e) =>
