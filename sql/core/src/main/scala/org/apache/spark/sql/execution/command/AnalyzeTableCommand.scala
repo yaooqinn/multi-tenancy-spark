@@ -63,6 +63,7 @@ case class AnalyzeTableCommand(
       val oldTotalSize = catalogTable.stats.map(_.sizeInBytes.toLong).getOrElse(0L)
       val oldRowCount = catalogTable.stats.flatMap(_.rowCount.map(_.toLong)).getOrElse(-1L)
       var newStats: Option[Statistics] = None
+      var newProps = catalogTable.properties
       if (newTotalSize > 0 && newTotalSize != oldTotalSize) {
         newStats = Some(Statistics(sizeInBytes = newTotalSize))
       }
@@ -79,11 +80,14 @@ case class AnalyzeTableCommand(
             Some(Statistics(sizeInBytes = oldTotalSize, rowCount = Some(BigInt(newRowCount))))
           }
         }
+        newProps = catalogTable.properties ++ Map(
+          "numRows" -> newRowCount.toString,
+          "STATS_GENERATED_VIA_STATS_TASK" -> "true")
       }
       // Update the metastore if the above statistics of the table are different from those
       // recorded in the metastore.
       if (newStats.isDefined) {
-        sessionState.catalog.alterTable(catalogTable.copy(stats = newStats))
+        sessionState.catalog.alterTable(catalogTable.copy(properties = newProps, stats = newStats))
         // Refresh the cached data source table in the catalog.
         sessionState.catalog.refreshTable(tableIdentWithDB)
       }
