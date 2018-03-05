@@ -68,8 +68,9 @@ private[thriftserver] class SparkSQLOperationManager()
 
     val sessionState = sparkSession.sessionState.asInstanceOf[HiveSessionState]
     val plan = sessionState.sqlParser.parsePlan(statement)
+    val analyzedPlan = sessionState.analyzer.execute(plan)
     // add this to support the old static multi thrift server
-    val optimizedPlan = sessionState.optimizer.execute(plan)
+    val optimizedPlan = sessionState.optimizer.execute(analyzedPlan)
     // authorize happens here
     val opType = toHiveOperationType(optimizedPlan)
     val (in, out) = HivePrivObjsFromPlan.build(optimizedPlan, client.getCurrentDatabase)
