@@ -27,7 +27,7 @@ import org.apache.hadoop.ipc.RemoteException
 import org.apache.hadoop.security.Credentials
 import org.apache.hadoop.security.token.SecretManager.InvalidToken
 
-import org.apache.spark.{CredentialCache, SparkConf}
+import org.apache.spark.SparkConf
 import org.apache.spark.deploy.SparkHadoopUtil
 import org.apache.spark.deploy.yarn.config._
 import org.apache.spark.internal.Logging
@@ -83,7 +83,6 @@ private[spark] class CredentialUpdater(
             val newCredentials = getCredentialsFromHDFSFile(remoteFs, credentialsStatus.getPath)
             lastCredentialsFileSuffix = suffix
             SparkHadoopUtil.get.addCurrentUserCredentials(newCredentials)
-            CredentialCache.set(user, newCredentials)
             logInfo("Credentials updated from credentials file.")
 
             val remainingTime = (getTimeOfNextUpdateFromFileName(credentialsStatus.getPath)

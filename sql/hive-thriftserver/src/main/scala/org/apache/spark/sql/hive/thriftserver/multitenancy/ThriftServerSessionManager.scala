@@ -34,7 +34,7 @@ import org.apache.hive.service.cli.session.HiveSession
 import org.apache.hive.service.cli.thrift.TProtocolVersion
 import org.apache.hive.service.server.ThreadFactoryWithGarbageCleanup
 
-import org.apache.spark.{CredentialCache, SparkConf, SparkException}
+import org.apache.spark.{SparkConf, SparkException}
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.hive.thriftserver.monitor.ThriftServerMonitor
@@ -193,7 +193,6 @@ private[hive] class ThriftServerSessionManager private(
                 removeSparkSession(user)
                 ThriftServerMonitor.detachUITab(user)
                 session.stop()
-                CredentialCache.set(user, null)
               }
             case _ =>
           }
