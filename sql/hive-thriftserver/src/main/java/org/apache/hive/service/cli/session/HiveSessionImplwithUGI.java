@@ -33,8 +33,6 @@ import org.apache.hive.service.auth.HiveAuthFactory;
 import org.apache.hive.service.cli.HiveSQLException;
 import org.apache.hive.service.cli.thrift.TProtocolVersion;
 
-import org.apache.spark.CredentialCache;
-
 /**
  *
  * HiveSessionImplwithUGI.
@@ -73,10 +71,6 @@ public class HiveSessionImplwithUGI extends HiveSessionImpl {
       try {
         sessionUgi = UserGroupInformation.createProxyUser(
             owner, UserGroupInformation.getCurrentUser());
-        Credentials creds = CredentialCache.get(owner);
-        if (creds != null) {
-          sessionUgi.addCredentials(creds);
-        }
       } catch (IOException e) {
         throw new HiveSQLException("Couldn't setup proxy user", e);
       }
