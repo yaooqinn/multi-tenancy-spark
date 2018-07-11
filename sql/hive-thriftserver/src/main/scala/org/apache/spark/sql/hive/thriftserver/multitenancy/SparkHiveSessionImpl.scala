@@ -36,7 +36,7 @@ import org.apache.hive.service.cli.operation.{Operation, OperationManager}
 import org.apache.hive.service.cli.session.{HiveSession, SessionManager}
 import org.apache.hive.service.cli.thrift.TProtocolVersion
 
-import org.apache.spark.{CredentialCache, SparkConf}
+import org.apache.spark.SparkConf
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.catalyst.optimizer.Authorizer
@@ -68,6 +68,7 @@ class SparkHiveSessionImpl(
     if (withImpersonation) {
       if (UserGroupInformation.isSecurityEnabled) {
         try {
+          currentUser.reloginFromKeytab()
           UserGroupInformation.createProxyUser(username, currentUser)
         } catch {
           case e: Exception =>
@@ -104,9 +105,6 @@ class SparkHiveSessionImpl(
     sessionManager.getExistSparkSession(userName) match {
       case Some((ss, times)) if !ss.sparkContext.isStopped =>
         logInfo(s"SparkSession for [$userName] is reused " + times.incrementAndGet() + "times")
-        Option(CredentialCache.get(userName)).foreach { credentials =>
-          sessionUGI.addCredentials(credentials)
-        }
         _sparkSession = ss.newSession()
       case _ =>
         sessionManager.setSCPartiallyConstructed(userName)

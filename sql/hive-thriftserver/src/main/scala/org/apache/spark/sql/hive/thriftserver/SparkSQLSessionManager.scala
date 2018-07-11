@@ -22,7 +22,6 @@ import java.util.{Map => JMap}
 import java.util.concurrent.ConcurrentHashMap
 
 import scala.collection.JavaConverters._
-import scala.collection.mutable.ArrayBuffer
 
 import org.apache.hadoop.hive.conf.HiveConf
 import org.apache.hadoop.hive.conf.HiveConf.ConfVars
@@ -33,7 +32,7 @@ import org.apache.hive.service.cli.session._
 import org.apache.hive.service.cli.thrift.TProtocolVersion
 import org.apache.hive.service.server.HiveServer2
 
-import org.apache.spark.{CredentialCache, SparkException}
+import org.apache.spark.SparkException
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.hive.{HiveExternalCatalog, HiveUtils}
@@ -155,12 +154,6 @@ private[hive] class SparkSQLSessionManager(hiveServer: HiveServer2)
       .onSessionClosed(sessionHandle.getSessionId.toString)
     super.closeSession(sessionHandle)
     sparkSqlOperationManager.sessionToActivePool.remove(sessionHandle)
-
-    val credentials = CredentialCache.get(user.getShortUserName)
-    if (credentials != null) {
-      logInfo(s"Adding Fresh Credentials For User:[${user.getShortUserName}]")
-      user.addCredentials(credentials)
-    }
     sparkSqlOperationManager.sessionToSparkSession.remove(sessionHandle)
     val hiveClient = sparkSqlOperationManager.sessionToClient.remove(sessionHandle)
     if (hiveClient != null) {

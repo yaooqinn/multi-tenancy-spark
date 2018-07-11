@@ -46,8 +46,8 @@ import org.apache.hadoop.yarn.client.api.{YarnClient, YarnClientApplication}
 import org.apache.hadoop.yarn.conf.YarnConfiguration
 import org.apache.hadoop.yarn.exceptions.ApplicationNotFoundException
 import org.apache.hadoop.yarn.util.Records
+import org.apache.spark.{SecurityManager, SparkConf, SparkException}
 
-import org.apache.spark.{CredentialCache, SecurityManager, SparkConf, SparkException}
 import org.apache.spark.deploy.SparkHadoopUtil
 import org.apache.spark.deploy.yarn.config._
 import org.apache.spark.deploy.yarn.security.ConfigurableCredentialManager
@@ -406,8 +406,6 @@ private[spark] class Client(
       // Add credentials to current user's UGI, so that following operations don't need to use the
       // Kerberos tgt to get delegations again in the client side.
       UserGroupInformation.getCurrentUser.addCredentials(credentials)
-      CredentialCache.set(currentUser.getShortUserName, credentials)
-      logInfo("Credentials are cached for " + currentUser.getShortUserName)
       logDebug(YarnSparkHadoopUtil.get.dumpTokens(credentials).mkString("\n"))
     }
 
