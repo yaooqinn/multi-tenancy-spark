@@ -186,7 +186,7 @@
     <commons-crypto.version>1.0.0</commons-crypto.version>
 
     <!--For Netease deployment added by hzyaoqin -->
-    <mysql.version>5.1.41</mysql.version>
+    <mysql.version>8.0.16</mysql.version>
     <mysql.scope>compile</mysql.scope>
 
     <test.java.home>${java.home}</test.java.home>
